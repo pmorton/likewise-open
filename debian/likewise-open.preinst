@@ -1,0 +1,220 @@
+#!/bin/sh
+
+UPGRADEDIR4="/etc/likewise-open/4_1_upgrade"
+
+# Not all daemons in the list were 'officially' released on Ubuntu. But it
+# should not hurt to have them listed.
+DAEMONS_TO_HALT="likewise-winbindd lwsmd lwregd netlogond lwiod dcerpcd eventlogd lsassd"
+
+LOG=/var/log/likewise-open-install.log
+TLOG=/tmp/likewise-open-install.txt
+
+# Display to screen and log file with a blank line.
+log()
+{
+    echo $@
+    echo
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+_log()
+{
+    echo $@
+    echo $@ >> $LOG
+}
+
+# Display to file.
+logfile()
+{
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file.
+exec_log()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Warning: $@ returned $err"
+        _log `cat $TLOG`
+        _log
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# Log only to file.
+exec_logfile()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+    else
+        echo "Warning: $@ returned $err" >> $LOG
+    fi
+    cat $TLOG >> $LOG
+    echo >> $LOG
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file and then exit.
+exec_log_exit()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Error: $@ returned $err"
+        _log `cat $TLOG`
+        _log
+        rm -f $TLOG > /dev/null 2>&1
+        exit 1
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+rm_conffile() {
+    CONFFILE="$1"
+
+    if [ -e "$CONFFILE" ]; then
+        md5sum="`md5sum \"$CONFFILE\" | sed -e \"s/ .*//\"`"
+        old_md5sum="`sed -n -e \"/^Conffiles:/,/^[^ ]/{\\\\' $CONFFILE'{s/.* //;p}}\" /var/lib/dpkg/status`"
+        if [ "$md5sum" != "$old_md5sum" ]; then
+            log "Obsolete conffile $CONFFILE has been modified by you."
+            log "Saving as $CONFFILE.dpkg-bak ..."
+            exec_log "mv -f $CONFFILE $CONFFILE.dpkg-bak"
+        else
+            log "Removing obsolete conffile $CONFFILE ..."
+            exec_log "rm -f $CONFFILE"
+        fi
+    fi
+}
+
+save_4_1_files()
+{
+    if [ -f /etc/samba/lwiauthd.conf -a -f /etc/samba/secrets.tdb ]
+    then
+        exec_log_exit "mkdir -p ${UPGRADEDIR4}"
+        exec_log_exit "cp /etc/samba/lwiauthd.conf ${UPGRADEDIR4}"
+        exec_log_exit "cp /etc/samba/secrets.tdb ${UPGRADEDIR4}"
+    fi
+}
+
+case "$1" in
+
+    install)
+    logfile "### likewise-open.preinst install"
+    if [ -f /opt/likewise/data/VERSION ]; then
+        log "Error: found /opt/likewise/data/VERSION"
+        log "Please remove versions of Likewise Open and Likewise Enterprise not supported by Ubuntu before installing this package."
+        exit 101
+    fi
+
+    #### AGGRESIVELY STOP LIKEWISE DAEMONS -- may be running from previous
+    #### version that didn't kill them all
+    # There are many user reports that indicate there is a
+    # misbehaving daemon that interferes with installs/upgrades.
+    logfile "Snapshot of processes before stopping daemons"
+    exec_logfile "ps ax"
+
+    # Shutdown old daemons nicely
+    if [ -f /etc/init.d/lsassd ]
+    then
+        exec_log "/etc/init.d/lsassd stop"
+    fi
+
+    for daemon in $DAEMONS_TO_HALT
+    do
+        if [ -x /etc/init.d/$daemon ]; then
+            exec_logfile "/etc/init.d/$daemon stop"
+        fi
+        exec_logfile "pkill -TERM -x $daemon"
+        exec_logfile "pkill -KILL -x $daemon"
+        exec_logfile "rm -f /var/run/$daemon.pid"
+    done
+
+    logfile "Snapshot of processes after stopping daemons"
+    exec_logfile "ps ax"
+    exit 0
+    ;;
+
+    abort-upgrade)
+    logfile "### likewise-open.preinst abort-upgrade (doing nothing)"
+    exit 0
+    ;;
+
+    upgrade)
+    logfile "### likewise-open.preinst upgrade"
+
+    if dpkg --compare-versions "$2" le "4.1.2982-0ubuntu3"; then
+
+        exec_log "pam-auth-update --package --remove likewise-open"
+
+        # Shutdown old daemons (if running)
+        if [ -f /etc/init.d/likewise-open ]
+        then
+            exec_log "/etc/init.d/likewise-open stop"
+        fi
+
+        save_4_1_files
+
+        if [ -x /usr/bin/domainjoin-cli ]; then
+            exec_log "/usr/bin/domainjoin-cli leave"
+        fi
+    fi
+
+    # remove obsolete conffiles from previous versions
+    if dpkg --compare-versions "$2" lt-nl "5.4.0"; then
+        # from 4.1
+        rm_conffile /etc/samba/lwiauthd.conf
+        rm_conffile /etc/security/pam_lwidentity.conf
+        rm_conffile /etc/default/likewise-open
+        rm_conffile /etc/init.d/likewise-open
+        # from 5.0
+        rm_conffile /etc/init.d/npcmuxd
+    fi
+
+    if dpkg --compare-versions "$2" lt-nl "6.0.0"; then
+        # Shutdown old daemons nicely
+        if [ -f /etc/init.d/lsassd ]
+        then
+            exec_log "/etc/init.d/lsassd stop"
+        fi
+
+        for daemon in $DAEMONS_TO_HALT
+        do
+            if [ -x /etc/init.d/$daemon ]; then
+                exec_logfile "/etc/init.d/$daemon stop"
+            fi
+            exec_logfile "pkill -TERM -x $daemon"
+            exec_logfile "pkill -KILL -x $daemon"
+            exec_logfile "rm -f /var/run/$daemon.pid"
+        done
+
+        logfile "Snapshot of processes after stopping daemons"
+        exec_logfile "ps ax"
+
+    fi
+    exit 0
+    ;;
+
+esac
+
+#DEBHELPER#

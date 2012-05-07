@@ -1,0 +1,82 @@
+Author: Scott Salley <ssalley@beyondtrust.com>
+Description: Add dependencies and other attributes for making highly parallel builds a success
+Forwarded: yes
+Last-Update: 2011-07-29
+
+diff -Nurb likewise-open-6.1.0.406/lsass/MakeKitBuild likewise-open-6.1.0.406.new/lsass/MakeKitBuild
+--- likewise-open-6.1.0.406/lsass/MakeKitBuild	2011-07-27 12:03:21.000000000 -0700
++++ likewise-open-6.1.0.406.new/lsass/MakeKitBuild	2011-07-29 18:02:06.000000000 -0700
+@@ -203,6 +203,7 @@
+         sqlite3.h
+ 
+     mk_check_headers \
++        FAIL=yes \
+         eventlog.h
+ 
+     mk_check_types \
+diff -Nurb likewise-open-6.1.0.406/lsass/server/auth-providers/ad-open-provider/adprovider.h likewise-open-6.1.0.406.new/lsass/server/auth-providers/ad-open-provider/adprovider.h
+--- likewise-open-6.1.0.406/lsass/server/auth-providers/ad-open-provider/adprovider.h	2011-07-27 12:03:18.000000000 -0700
++++ likewise-open-6.1.0.406.new/lsass/server/auth-providers/ad-open-provider/adprovider.h	2011-07-29 18:09:34.000000000 -0700
+@@ -59,7 +59,6 @@
+ #include <openssl/des.h>
+ #include <sqlite3.h>
+ #include <uuid/uuid.h>
+-#include <eventlog.h>
+ #include <lwnet.h>
+ #include <lwio/lwio.h>
+ #include <reg/lwreg.h>
+diff -Nurb likewise-open-6.1.0.406/lsass/server/lsassd/MakeKitBuild likewise-open-6.1.0.406.new/lsass/server/lsassd/MakeKitBuild
+--- likewise-open-6.1.0.406/lsass/server/lsassd/MakeKitBuild	2011-07-27 12:03:17.000000000 -0700
++++ likewise-open-6.1.0.406.new/lsass/server/lsassd/MakeKitBuild	2011-07-29 17:35:41.000000000 -0700
+@@ -18,7 +18,7 @@
+         INSTALLDIR="${MK_SBINDIR}" \
+         SOURCES="main.c globals.c listener.c libmain.c backtrace.c sighandler.c" \
+         INCLUDEDIRS=". ../include ../../include" \
+-        HEADERDEPS="lwadvapi.h lwio/lwio.h" \
++        HEADERDEPS="lwadvapi.h lwio/lwio.h eventlog.h dce/dcethread.h" \
+         LIBDEPS="lsaserverapi lsacommon ntlmserver lsaclient_ntlm lwnetclientapi lwnetcommon lwioclient lwiocommon lwmsg lwmsg_nothr lwadvapi lwadvapi_nothr lwbase_nothr dcerpc pthread"
+ }
+ 
+diff -Nurb likewise-open-6.1.0.406/lwnetapi/MakeKitBuild likewise-open-6.1.0.406.new/lwnetapi/MakeKitBuild
+--- likewise-open-6.1.0.406/lwnetapi/MakeKitBuild	2011-07-27 12:02:58.000000000 -0700
++++ likewise-open-6.1.0.406.new/lwnetapi/MakeKitBuild	2011-07-29 18:43:33.000000000 -0700
+@@ -1,4 +1,4 @@
+-SUBDIRS="include src test"
++SUBDIRS="include src"
+ 
+ configure()
+ {
+diff -Nurb likewise-open-6.1.0.406/lwreg/libedit/MakeKitBuild likewise-open-6.1.0.406.new/lwreg/libedit/MakeKitBuild
+--- likewise-open-6.1.0.406/lwreg/libedit/MakeKitBuild	2011-07-27 12:02:15.000000000 -0700
++++ likewise-open-6.1.0.406.new/lwreg/libedit/MakeKitBuild	2011-07-29 17:55:39.000000000 -0700
+@@ -5,6 +5,6 @@
+         HEADERS="editline/readline.h histedit.h" \
+         HEADERDEPS="ncurses/ncurses.h" \
+         LIBDEPS="ncurses" \
+-        CFLAGS="-Wno-error"
++        CFLAGS="-Wno-error" \
+         CPPFLAGS="-D_REENTRANT -D_THREAD_SAFE"
+ }
+diff -Nurb likewise-open-6.1.0.406/lwreg/MakeKitBuild likewise-open-6.1.0.406.new/lwreg/MakeKitBuild
+--- likewise-open-6.1.0.406/lwreg/MakeKitBuild	2011-07-27 12:02:15.000000000 -0700
++++ likewise-open-6.1.0.406.new/lwreg/MakeKitBuild	2011-07-29 17:55:57.000000000 -0700
+@@ -1,4 +1,4 @@
+-SUBDIRS="include libedit utils ipc common client logging_r parse server shellutil shell"
++SUBDIRS="include utils ipc common client logging_r parse server shellutil shell"
+ 
+ configure()
+ {
+@@ -55,11 +55,11 @@
+ 
+     mk_check_headers \
+ 	FAIL=yes \
+-	sqlite3.h uuid/uuid.h
++	sqlite3.h uuid/uuid.h histedit.h
+     
+     mk_check_libraries \
+ 	FAIL=yes \
+-	sqlite3 uuid
++	sqlite3 uuid edit
+ 
+     mk_check_libraries pthread
+ 

@@ -99,11 +99,7 @@ LsaReadVersionFile(
 #ifdef MINIMAL_LSASS
     versionFile = open(LOCALSTATEDIR "/VERSION", O_RDONLY, 0);
 #else
-    versionFile = open(PREFIXDIR "/data/ENTERPRISE_VERSION", O_RDONLY, 0);
-    if (versionFile < 0 && errno == ENOENT)
-    {
-        versionFile = open(PREFIXDIR "/data/VERSION", O_RDONLY, 0);
-    }
+    versionFile = open(PREFIXDIR "/share/likewise-open/VERSION", O_RDONLY, 0);
 #endif
     if (versionFile < 0)
     {

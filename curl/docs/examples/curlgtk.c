@@ -80,7 +80,7 @@ int main(int argc, char **argv)
   curl_global_init(CURL_GLOBAL_ALL);
 
   /* Init thread */
-  g_thread_init(NULL);
+  g_type_init();
 
   gtk_init(&argc, &argv);
   Window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -96,7 +96,7 @@ int main(int argc, char **argv)
   gtk_container_add(GTK_CONTAINER(Frame2), Bar);
   gtk_widget_show_all(Window);
 
-  if (!g_thread_create(&my_thread, argv[1], FALSE, NULL) != 0)
+  if (!g_thread_new(NULL, &my_thread, argv[1]) != 0)
     g_warning("can't create the thread");
 
 

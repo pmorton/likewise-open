@@ -1,0 +1,185 @@
+#!/usr/bin/make -f
+
+# This has to be exported to make some magic below work.
+export DH_OPTIONS
+
+# Uncomment this to turn on verbose mode.
+#export DH_VERBOSE=1
+
+# Set the host and build architectures for use with config.cache loading,
+# cross-building, etc.
+DEB_HOST_GNU_TYPE	:= $(shell dpkg-architecture -qDEB_HOST_GNU_TYPE)
+DEB_BUILD_GNU_TYPE	:= $(shell dpkg-architecture -qDEB_BUILD_GNU_TYPE)
+DEB_HOST_ARCH_OS	:= $(shell dpkg-architecture -qDEB_HOST_ARCH_OS)
+
+export DEB_HOST_GNU_TYPE
+export DEB_BUILD_GNU_TYPE
+export DEB_HOST_ARCH_OS
+pyversion := $(shell pyversions -vd)
+
+ifneq (,$(findstring debug,$(DEB_BUILD_OPTIONS)))
+    LW_DEBUG="yes"
+else
+    LW_DEBUG="no"
+endif
+
+ifneq (,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    NUMJOBS = $(patsubst parallel=%,%,$(filter parallel=%,$(DEB_BUILD_OPTIONS)))
+    LW_MAKEFLAGS += -j$(NUMJOBS)
+endif
+
+include /usr/share/quilt/quilt.make
+
+PKGNAME=likewise-open
+PREFIX=/usr
+LIBDIR=$(PREFIX)/lib/$(PKGNAME)
+LIBEXECDIR=$(PREFIX)/libexec/$(PKGNAME)
+LOCALSTATEDIR=/var/lib/$(PKGNAME)
+SYSCONFDIR=/etc/$(PKGNAME)
+DATADIR=$(PREFIX)/share/$(PKGNAME)
+
+BUILDDIR=`pwd`/buildbuild/stage
+DESTDIR=`pwd`/debian/tmp
+
+RSYNC=rsync -a --exclude-from=debian/install-excludes
+
+ifeq ($(DEB_BUILD_GNU_TYPE), $(DEB_HOST_GNU_TYPE))
+  conf_args += --build $(DEB_BUILD_GNU_TYPE)
+else
+  conf_args += --build $(DEB_BUILD_GNU_TYPE) --host $(DEB_HOST_GNU_TYPE)
+endif
+
+configure: configure-stamp
+
+configure-stamp: $(QUILT_STAMPFN)
+	dh_testdir
+	ln -s lwreg/libedit libedit
+	(mkdir -p buildbuild && \
+        cd buildbuild && \
+        ../configure \
+            --debug=$(LW_DEBUG) \
+            --prefix=$(PREFIX) \
+            --libdir=$(LIBDIR) \
+            --libexecdir=$(LIBEXECDIR) \
+            --sysconfdir=$(SYSCONFDIR) \
+            --localstatedir=/var \
+            --lw-cachedir=$(LOCALSTATEDIR) \
+            --datadir=$(DATADIR) \
+            --lw-configdir=$(DATADIR)/config \
+            --build-multiarch=none \
+            --lw-bundled-libs="" \
+            --lw-feature-level=auth )
+	touch configure-stamp
+
+build: build-stamp
+
+build-stamp: configure-stamp
+	dh_testdir
+
+	make -C buildbuild $(LW_MAKEFLAGS) V=1
+	# Non-standard directory is used upstream for historical reasons
+	mv $(BUILDDIR)$(PREFIX)/data/VERSION $(BUILDDIR)/usr/share/$(PKGNAME)
+
+# Use debian/likewise-open.pam-auth-update
+	rm -f $(BUILDDIR)$(PREFIX)/share/$(PKGNAME)/likewise.pam-auth-update
+
+# Don't know why this is there
+	rm -f $(BUILDDIR)/etc/krb5.conf.default
+
+# Remove development files
+	rm -rf $(BUILDDIR)$(PREFIX)/include
+	find $(BUILDDIR) -name '*.la' -print | xargs rm -f
+	find $(BUILDDIR) -name '*.a' -print | xargs rm -f
+
+	touch build-stamp
+
+
+clean: clean-patched unpatch
+
+clean-patched:
+	dh_testdir
+	dh_testroot
+	rm -f build-stamp configure-stamp
+
+	dh_clean
+
+install: build
+	dh_testdir
+	dh_testroot
+	dh_prep
+
+	# Copy all the files except for likewise-open-gui
+	mkdir -p $(DESTDIR)/likewise-open
+	cp -a $(BUILDDIR)/* $(DESTDIR)/likewise-open
+	rm -f \
+		$(DESTDIR)/likewise-open/usr/bin/domainjoin-gui \
+		$(DESTDIR)/likewise-open/usr/share/likewise-open/domainjoin-gtk.glade \
+		$(DESTDIR)/likewise-open/usr/share/likewise-open/domainjoin-logo.png \
+		$(DESTDIR)/likewise-open/usr/share/likewise-open/likewise-logo.png
+
+	install -D -m 644 debian/$(PKGNAME).pam-auth-update $(DESTDIR)/likewise-open/usr/share/pam-configs/$(PKGNAME)
+
+	# AppArmor HOMEDIRS tunable
+	mkdir -p $(DESTDIR)/likewise-open/etc/apparmor.d/tunables/home.d
+	cp debian/apparmor.homedirs $(DESTDIR)/likewise-open/etc/apparmor.d/tunables/home.d/likewise-open
+
+	# Copy all the file for likewise-open
+	dh_installdirs -p$@
+	mkdir -p $(DESTDIR)/likewise-open-gui/usr/bin
+	cp -a \
+		$(BUILDDIR)/usr/bin/domainjoin-gui \
+		$(DESTDIR)/likewise-open-gui/usr/bin
+
+	mkdir -p $(DESTDIR)/likewise-open-gui/usr/share/likewise-open
+	cp -a \
+		$(BUILDDIR)/usr/share/likewise-open/domainjoin-gtk.glade \
+		$(BUILDDIR)/usr/share/likewise-open/domainjoin-logo.png \
+		$(BUILDDIR)/usr/share/likewise-open/likewise-logo.png \
+		$(DESTDIR)/likewise-open-gui/usr/share/likewise-open
+
+	mkdir -p $(DESTDIR)/likewise-open-gui/usr/share/applications
+	install -D -m 644 debian/likewise-open-gui.desktop $(DESTDIR)/likewise-open-gui/usr/share/applications
+	mkdir -p $(DESTDIR)/likewise-open-gui/usr/share/icons
+	install -D -m 644 debian/likewise-gui.xpm $(DESTDIR)/likewise-open-gui/usr/share/icons/
+
+# Build architecture-independent files here.
+binary-indep: build install
+	dh_installchangelogs -i
+	dh_installdocs -i
+	dh_installdirs -i
+	dh_installman -i
+	dh_installinit -i
+	dh_compress -i
+	dh_fixperms -i
+	dh_installdeb -i
+	dh_gencontrol -i
+	dh_md5sums -i
+	dh_builddeb -i
+
+# Build architecture-dependent files here.
+binary-arch: install
+	dh_installchangelogs -a
+	dh_installdocs -a
+	dh_installdirs -a
+	dh_install --sourcedir=$(DESTDIR)/likewise-open -plikewise-open --list-missing
+	dh_install --sourcedir=$(DESTDIR)/likewise-open-gui -plikewise-open-gui --list-missing
+	dh_strip -a
+	dh_installman -a
+	dh_installinit -a
+	dh_compress -a
+	dh_fixperms -a
+
+	dh_makeshlibs -plikewise-open
+	mv debian/likewise-open/DEBIAN/shlibs debian/shlibs.local
+	dh_shlibdeps -a -l$(CURDIR)/debian/$(PKGNAME)$(PREFIX)/lib/$(PKGNAME)
+
+	# FIXME: why just strip/compress/fixperms the -gui package
+	dh_strip -plikewise-open-gui
+
+	dh_installdeb -a
+	dh_gencontrol -a
+	dh_md5sums -a
+	dh_builddeb -a
+
+binary: binary-indep binary-arch
+.PHONY: build clean binary-indep binary-arch binary install configure

@@ -1,0 +1,677 @@
+--- likewise-open-6.1.0.406.orig/dcerpc/MakeKitBuild
++++ likewise-open-6.1.0.406/dcerpc/MakeKitBuild
+@@ -160,6 +160,9 @@
+             ia64_32)
+                 target_cpu="$target_cpu ia64"
+                 ;;
++            arm*)
++                target_cpu="$target_cpu arm"
++                ;;
+         esac
+     done
+ 
+--- likewise-open-6.1.0.406.orig/dcerpc/include/dce/arm/Makefile.am
++++ likewise-open-6.1.0.406/dcerpc/include/dce/arm/Makefile.am
+@@ -0,0 +1,3 @@
++## Process this file with automake to produce Makefile.in
++dceincludedir = $(includedir)/dce/arm
++dceinclude_HEADERS = marshall.h ndr_rep.h ndrtypes.h
+--- likewise-open-6.1.0.406.orig/dcerpc/include/dce/arm/ndrtypes.h
++++ likewise-open-6.1.0.406/dcerpc/include/dce/arm/ndrtypes.h
+@@ -0,0 +1,97 @@
++/*
++ * 
++ * (c) Copyright 1991 OPEN SOFTWARE FOUNDATION, INC.
++ * (c) Copyright 1991 HEWLETT-PACKARD COMPANY
++ * (c) Copyright 1991 DIGITAL EQUIPMENT CORPORATION
++ * To anyone who acknowledges that this file is provided "AS IS"
++ * without any express or implied warranty:
++ *                 permission to use, copy, modify, and distribute this
++ * file for any purpose is hereby granted without fee, provided that
++ * the above copyright notices and this notice appears in all source
++ * code copies, and that none of the names of Open Software
++ * Foundation, Inc., Hewlett-Packard Company, or Digital Equipment
++ * Corporation be used in advertising or publicity pertaining to
++ * distribution of the software without specific, written prior
++ * permission.  Neither Open Software Foundation, Inc., Hewlett-
++ * Packard Company, nor Digital Equipment Corporation makes any
++ * representations about the suitability of this software for any
++ * purpose.
++ * 
++ */
++/* 
++ */
++/*
++**  NAME:
++**
++**      ndrtypes.h
++**
++**  FACILITY:
++**
++**      IDL Stub Support Include File
++**
++**  ABSTRACT:
++**
++**  This file is new for DCE 1.1. This is a platform specific file that
++**  defines the base level ndr types. This file is indirectly included 
++**  in all files via the idlbase.h file. 
++**
++*/
++
++/*
++ * This particular file defines the NDR types for a little-endian 
++ * architecture. This file also depends on the presence of a ANSI 
++ * C compiler, in that it uses the signed keyword to create the 
++ * ndr_small_int type.
++ */
++
++#ifndef _NDR_TYPES_H 
++#define  _NDR_TYPES_H
++
++typedef unsigned char 		ndr_boolean;
++#define ndr_false       false
++#define ndr_true        true
++typedef unsigned char 		ndr_byte;
++
++typedef unsigned char 		ndr_char;
++
++typedef signed char 		ndr_small_int;
++
++typedef unsigned char 		ndr_usmall_int;
++
++typedef short int 		ndr_short_int;
++
++typedef unsigned short int	ndr_ushort_int;
++
++typedef long int 		ndr_long_int;
++
++typedef unsigned int     	ndr_ulong_int;
++
++/* 
++ * the reps for hyper must match the little-endian NDR rep since
++ *  defined(vax) || defined(M_I86) => defined(ALIGNED_SCALAR_ARRAYS) 
++ */
++
++struct ndr_hyper_int_rep_s_t {
++    ndr_ulong_int low; 
++    ndr_long_int high;
++};
++
++struct ndr_uhyper_int_rep_s_t {
++    ndr_ulong_int low; 
++    ndr_ulong_int high;
++};
++
++#ifdef __GNUC__
++typedef long long int		ndr_hyper_int;
++typedef unsigned long long int	ndr_uhyper_int;
++#else
++typedef struct ndr_hyper_int_rep_s_t ndr_hyper_int;
++typedef struct ndr_uhyper_int_rep_s_t ndr_uhyper_int;
++#endif /* __GNUC__ */
++
++typedef float 		        ndr_short_float;
++typedef double 			ndr_long_float;
++
++
++#endif /* _NDR_TYPES_H */
++
+--- likewise-open-6.1.0.406.orig/dcerpc/include/dce/arm/marshall.h
++++ likewise-open-6.1.0.406/dcerpc/include/dce/arm/marshall.h
+@@ -0,0 +1,39 @@
++/*
++ * 
++ * (c) Copyright 1991 OPEN SOFTWARE FOUNDATION, INC.
++ * (c) Copyright 1991 HEWLETT-PACKARD COMPANY
++ * (c) Copyright 1991 DIGITAL EQUIPMENT CORPORATION
++ * To anyone who acknowledges that this file is provided "AS IS"
++ * without any express or implied warranty:
++ *                 permission to use, copy, modify, and distribute this
++ * file for any purpose is hereby granted without fee, provided that
++ * the above copyright notices and this notice appears in all source
++ * code copies, and that none of the names of Open Software
++ * Foundation, Inc., Hewlett-Packard Company, or Digital Equipment
++ * Corporation be used in advertising or publicity pertaining to
++ * distribution of the software without specific, written prior
++ * permission.  Neither Open Software Foundation, Inc., Hewlett-
++ * Packard Company, nor Digital Equipment Corporation makes any
++ * representations about the suitability of this software for any
++ * purpose.
++ * 
++ */
++/* 
++ */
++/*
++ * marshall.h 
++ * platform dependent (OS + Architecture) file split out from stubbase.h 
++ * for DCE 1.1 code cleanup 
++ *
++ * This file is always included as part of stubbase.h 
++ */
++
++#ifndef _MARSHALL_H 
++#define _MARSHALL_H
++
++/* ARM Architecture can use the default marshalling macros */
++#define USE_DEFAULT_NDR_MARSHALLING_MACROS
++
++
++#endif /* _MARSHALL_H */
++
+--- likewise-open-6.1.0.406.orig/dcerpc/include/dce/arm/ndr_rep.h
++++ likewise-open-6.1.0.406/dcerpc/include/dce/arm/ndr_rep.h
+@@ -0,0 +1,41 @@
++/*
++ * 
++ * (c) Copyright 1991 OPEN SOFTWARE FOUNDATION, INC.
++ * (c) Copyright 1991 HEWLETT-PACKARD COMPANY
++ * (c) Copyright 1991 DIGITAL EQUIPMENT CORPORATION
++ * To anyone who acknowledges that this file is provided "AS IS"
++ * without any express or implied warranty:
++ *                 permission to use, copy, modify, and distribute this
++ * file for any purpose is hereby granted without fee, provided that
++ * the above copyright notices and this notice appears in all source
++ * code copies, and that none of the names of Open Software
++ * Foundation, Inc., Hewlett-Packard Company, or Digital Equipment
++ * Corporation be used in advertising or publicity pertaining to
++ * distribution of the software without specific, written prior
++ * permission.  Neither Open Software Foundation, Inc., Hewlett-
++ * Packard Company, nor Digital Equipment Corporation makes any
++ * representations about the suitability of this software for any
++ * purpose.
++ * 
++ */
++/* 
++ */
++/*
++ * ndr_rep.h 
++ * platform dependent (OS + Architecture) file split out from stubbase.h 
++ * for DCE 1.1 code cleanup.
++ * This file contains the architecture specific definitions of the 
++ * local scaler data representation used 
++ *
++ * This file is always included as part of stubbase.h 
++ */
++
++#ifndef _NDR_REP_H 
++#define _NDR_REP_H
++
++#define NDR_LOCAL_INT_REP     ndr_c_int_little_endian
++#define NDR_LOCAL_FLOAT_REP   ndr_c_float_ieee
++#define NDR_LOCAL_CHAR_REP    ndr_c_char_ascii
++
++#endif /* _NDR_REP_H */
++
+--- likewise-open-6.1.0.406.orig/dcerpc/include/dce/arm/Makefile.in
++++ likewise-open-6.1.0.406/dcerpc/include/dce/arm/Makefile.in
+@@ -0,0 +1,470 @@
++# Makefile.in generated by automake 1.9.6 from Makefile.am.
++# @configure_input@
++
++# Copyright (C) 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
++# 2003, 2004, 2005  Free Software Foundation, Inc.
++# This Makefile.in is free software; the Free Software Foundation
++# gives unlimited permission to copy and/or distribute it,
++# with or without modifications, as long as this notice is preserved.
++
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY, to the extent permitted by law; without
++# even the implied warranty of MERCHANTABILITY or FITNESS FOR A
++# PARTICULAR PURPOSE.
++
++@SET_MAKE@
++
++srcdir = @srcdir@
++top_srcdir = @top_srcdir@
++VPATH = @srcdir@
++pkgdatadir = $(datadir)/@PACKAGE@
++pkglibdir = $(libdir)/@PACKAGE@
++pkgincludedir = $(includedir)/@PACKAGE@
++top_builddir = ../../..
++am__cd = CDPATH="$${ZSH_VERSION+.}$(PATH_SEPARATOR)" && cd
++INSTALL = @INSTALL@
++install_sh_DATA = $(install_sh) -c -m 644
++install_sh_PROGRAM = $(install_sh) -c
++install_sh_SCRIPT = $(install_sh) -c
++INSTALL_HEADER = $(INSTALL_DATA)
++transform = $(program_transform_name)
++NORMAL_INSTALL = :
++PRE_INSTALL = :
++POST_INSTALL = :
++NORMAL_UNINSTALL = :
++PRE_UNINSTALL = :
++POST_UNINSTALL = :
++build_triplet = @build@
++host_triplet = @host@
++target_triplet = @target@
++subdir = include/dce/arm
++DIST_COMMON = $(dceinclude_HEADERS) $(srcdir)/Makefile.am \
++	$(srcdir)/Makefile.in
++ACLOCAL_M4 = $(top_srcdir)/aclocal.m4
++am__aclocal_m4_deps = $(top_srcdir)/m4/as-ac-expand.m4 \
++	$(top_srcdir)/m4/libtool.m4 $(top_srcdir)/m4/ltoptions.m4 \
++	$(top_srcdir)/m4/ltsugar.m4 $(top_srcdir)/m4/ltversion.m4 \
++	$(top_srcdir)/m4/lt~obsolete.m4 $(top_srcdir)/acinclude.m4 \
++	$(top_srcdir)/configure.in
++am__configure_deps = $(am__aclocal_m4_deps) $(CONFIGURE_DEPENDENCIES) \
++	$(ACLOCAL_M4)
++mkinstalldirs = $(install_sh) -d
++CONFIG_HEADER = $(top_builddir)/include/config.h
++CONFIG_CLEAN_FILES =
++SOURCES =
++DIST_SOURCES =
++am__vpath_adj_setup = srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`;
++am__vpath_adj = case $$p in \
++    $(srcdir)/*) f=`echo "$$p" | sed "s|^$$srcdirstrip/||"`;; \
++    *) f=$$p;; \
++  esac;
++am__strip_dir = `echo $$p | sed -e 's|^.*/||'`;
++am__installdirs = "$(DESTDIR)$(dceincludedir)"
++dceincludeHEADERS_INSTALL = $(INSTALL_HEADER)
++HEADERS = $(dceinclude_HEADERS)
++ETAGS = etags
++CTAGS = ctags
++DISTFILES = $(DIST_COMMON) $(DIST_SOURCES) $(TEXINFOS) $(EXTRA_DIST)
++ACLOCAL = @ACLOCAL@
++AMDEP_FALSE = @AMDEP_FALSE@
++AMDEP_TRUE = @AMDEP_TRUE@
++AMTAR = @AMTAR@
++AR = @AR@
++AUTH_DUMMY_EXTRAS = @AUTH_DUMMY_EXTRAS@
++AUTH_DUMMY_FALSE = @AUTH_DUMMY_FALSE@
++AUTH_DUMMY_TRUE = @AUTH_DUMMY_TRUE@
++AUTH_GSS_NEGOTIATE_FALSE = @AUTH_GSS_NEGOTIATE_FALSE@
++AUTH_GSS_NEGOTIATE_TRUE = @AUTH_GSS_NEGOTIATE_TRUE@
++AUTH_NTLMSSP_FALSE = @AUTH_NTLMSSP_FALSE@
++AUTH_NTLMSSP_TRUE = @AUTH_NTLMSSP_TRUE@
++AUTH_SCHANNEL_FALSE = @AUTH_SCHANNEL_FALSE@
++AUTH_SCHANNEL_TRUE = @AUTH_SCHANNEL_TRUE@
++AUTOCONF = @AUTOCONF@
++AUTOHEADER = @AUTOHEADER@
++AUTOMAKE = @AUTOMAKE@
++AWK = @AWK@
++BISON = @BISON@
++BROKEN_ONCE_INIT = @BROKEN_ONCE_INIT@
++BUILD_CODESET_FALSE = @BUILD_CODESET_FALSE@
++BUILD_CODESET_TRUE = @BUILD_CODESET_TRUE@
++BUILD_RPC_NS_LDAP_FALSE = @BUILD_RPC_NS_LDAP_FALSE@
++BUILD_RPC_NS_LDAP_TRUE = @BUILD_RPC_NS_LDAP_TRUE@
++CC = @CC@
++CCDEPMODE = @CCDEPMODE@
++CFLAGS = @CFLAGS@
++CPP = @CPP@
++CPPFLAGS = @CPPFLAGS@
++CXX = @CXX@
++CXXCPP = @CXXCPP@
++CXXDEPMODE = @CXXDEPMODE@
++CXXFLAGS = @CXXFLAGS@
++CYGPATH_W = @CYGPATH_W@
++DCERPCD_SERVICE_TYPE = @DCERPCD_SERVICE_TYPE@
++DCETHREADINCLUDES = @DCETHREADINCLUDES@
++DEFS = @DEFS@
++DEPDIR = @DEPDIR@
++DSYMUTIL = @DSYMUTIL@
++DUMPBIN = @DUMPBIN@
++ECHO_C = @ECHO_C@
++ECHO_N = @ECHO_N@
++ECHO_T = @ECHO_T@
++EGREP = @EGREP@
++ENABLE_DCOM_FALSE = @ENABLE_DCOM_FALSE@
++ENABLE_DCOM_TRUE = @ENABLE_DCOM_TRUE@
++EXEEXT = @EXEEXT@
++FEATURETEST_CFLAGS = @FEATURETEST_CFLAGS@
++FGREP = @FGREP@
++FLEX = @FLEX@
++GENCAT = @GENCAT@
++GREP = @GREP@
++GSSAPI_INCLUDES = @GSSAPI_INCLUDES@
++GSSAPI_LDFLAGS = @GSSAPI_LDFLAGS@
++GSSAPI_LIBS = @GSSAPI_LIBS@
++HAVE_MOONUNIT_FALSE = @HAVE_MOONUNIT_FALSE@
++HAVE_MOONUNIT_TRUE = @HAVE_MOONUNIT_TRUE@
++IDL_CC = @IDL_CC@
++IDL_CFLAGS = @IDL_CFLAGS@
++IDL_CPP = @IDL_CPP@
++IDL_FLAGS = @IDL_FLAGS@
++INSTALL_DATA = @INSTALL_DATA@
++INSTALL_PROGRAM = @INSTALL_PROGRAM@
++INSTALL_SCRIPT = @INSTALL_SCRIPT@
++INSTALL_STRIP_PROGRAM = @INSTALL_STRIP_PROGRAM@
++LD = @LD@
++LDFLAGS = @LDFLAGS@
++LIBOBJS = @LIBOBJS@
++LIBS = @LIBS@
++LIBTOOL = @LIBTOOL@
++LIB_dl = @LIB_dl@
++LIB_moonunit = @LIB_moonunit@
++LIB_nsl = @LIB_nsl@
++LIB_pthread = @LIB_pthread@
++LIB_rt = @LIB_rt@
++LIB_socket = @LIB_socket@
++LIPO = @LIPO@
++LN_S = @LN_S@
++LTLDFLAGS = @LTLDFLAGS@
++LTLIBOBJS = @LTLIBOBJS@
++MAKEINFO = @MAKEINFO@
++MOONUNIT_STUB = @MOONUNIT_STUB@
++NAF_HTTP_FALSE = @NAF_HTTP_FALSE@
++NAF_HTTP_TRUE = @NAF_HTTP_TRUE@
++NAF_IP_FALSE = @NAF_IP_FALSE@
++NAF_IP_TRUE = @NAF_IP_TRUE@
++NAF_NP_FALSE = @NAF_NP_FALSE@
++NAF_NP_TRUE = @NAF_NP_TRUE@
++NAF_UXD_FALSE = @NAF_UXD_FALSE@
++NAF_UXD_TRUE = @NAF_UXD_TRUE@
++NM = @NM@
++NMEDIT = @NMEDIT@
++OBJEXT = @OBJEXT@
++OTOOL = @OTOOL@
++OTOOL64 = @OTOOL64@
++PACKAGE = @PACKAGE@
++PACKAGE_BUGREPORT = @PACKAGE_BUGREPORT@
++PACKAGE_NAME = @PACKAGE_NAME@
++PACKAGE_STRING = @PACKAGE_STRING@
++PACKAGE_TARNAME = @PACKAGE_TARNAME@
++PACKAGE_VERSION = @PACKAGE_VERSION@
++PATH_SEPARATOR = @PATH_SEPARATOR@
++PROT_NCACN_FALSE = @PROT_NCACN_FALSE@
++PROT_NCACN_TRUE = @PROT_NCACN_TRUE@
++PROT_NCADG_FALSE = @PROT_NCADG_FALSE@
++PROT_NCADG_TRUE = @PROT_NCADG_TRUE@
++RANLIB = @RANLIB@
++SBINDIR = @SBINDIR@
++SCHANNEL_INCLUDES = @SCHANNEL_INCLUDES@
++SCHANNEL_LDFLAGS = @SCHANNEL_LDFLAGS@
++SCHANNEL_LIBS = @SCHANNEL_LIBS@
++SED = @SED@
++SET_MAKE = @SET_MAKE@
++SHELL = @SHELL@
++STRIP = @STRIP@
++TARGET_OS_LINUX_FALSE = @TARGET_OS_LINUX_FALSE@
++TARGET_OS_LINUX_TRUE = @TARGET_OS_LINUX_TRUE@
++VERSION = @VERSION@
++ac_ct_CC = @ac_ct_CC@
++ac_ct_CXX = @ac_ct_CXX@
++ac_ct_DUMPBIN = @ac_ct_DUMPBIN@
++am__fastdepCC_FALSE = @am__fastdepCC_FALSE@
++am__fastdepCC_TRUE = @am__fastdepCC_TRUE@
++am__fastdepCXX_FALSE = @am__fastdepCXX_FALSE@
++am__fastdepCXX_TRUE = @am__fastdepCXX_TRUE@
++am__include = @am__include@
++am__leading_dot = @am__leading_dot@
++am__quote = @am__quote@
++am__tar = @am__tar@
++am__untar = @am__untar@
++bindir = @bindir@
++build = @build@
++build_alias = @build_alias@
++build_cpu = @build_cpu@
++build_os = @build_os@
++build_vendor = @build_vendor@
++datadir = @datadir@
++datarootdir = @datarootdir@
++docdir = @docdir@
++dvidir = @dvidir@
++exec_prefix = @exec_prefix@
++host = @host@
++host_alias = @host_alias@
++host_cpu = @host_cpu@
++host_os = @host_os@
++host_vendor = @host_vendor@
++htmldir = @htmldir@
++include_dcom_idl = @include_dcom_idl@
++includedir = @includedir@
++infodir = @infodir@
++install_sh = @install_sh@
++libdir = @libdir@
++libexecdir = @libexecdir@
++localedir = @localedir@
++localstatedir = @localstatedir@
++lt_ECHO = @lt_ECHO@
++mandir = @mandir@
++mkdir_p = @mkdir_p@
++oldincludedir = @oldincludedir@
++pdfdir = @pdfdir@
++prefix = @prefix@
++program_transform_name = @program_transform_name@
++psdir = @psdir@
++rpc_dir = @rpc_dir@
++sbindir = @sbindir@
++sharedstatedir = @sharedstatedir@
++subdirs = @subdirs@
++sysconfdir = @sysconfdir@
++target = @target@
++target_alias = @target_alias@
++target_cpu = @target_cpu@
++target_os = @target_os@
++target_vendor = @target_vendor@
++dceincludedir = $(includedir)/dce/arm
++dceinclude_HEADERS = marshall.h ndr_rep.h ndrtypes.h
++all: all-am
++
++.SUFFIXES:
++$(srcdir)/Makefile.in:  $(srcdir)/Makefile.am  $(am__configure_deps)
++	@for dep in $?; do \
++	  case '$(am__configure_deps)' in \
++	    *$$dep*) \
++	      cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh \
++		&& exit 0; \
++	      exit 1;; \
++	  esac; \
++	done; \
++	echo ' cd $(top_srcdir) && $(AUTOMAKE) --foreign  include/dce/arm/Makefile'; \
++	cd $(top_srcdir) && \
++	  $(AUTOMAKE) --foreign  include/dce/arm/Makefile
++.PRECIOUS: Makefile
++Makefile: $(srcdir)/Makefile.in $(top_builddir)/config.status
++	@case '$?' in \
++	  *config.status*) \
++	    cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh;; \
++	  *) \
++	    echo ' cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe)'; \
++	    cd $(top_builddir) && $(SHELL) ./config.status $(subdir)/$@ $(am__depfiles_maybe);; \
++	esac;
++
++$(top_builddir)/config.status: $(top_srcdir)/configure $(CONFIG_STATUS_DEPENDENCIES)
++	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
++
++$(top_srcdir)/configure:  $(am__configure_deps)
++	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
++$(ACLOCAL_M4):  $(am__aclocal_m4_deps)
++	cd $(top_builddir) && $(MAKE) $(AM_MAKEFLAGS) am--refresh
++
++mostlyclean-libtool:
++	-rm -f *.lo
++
++clean-libtool:
++	-rm -rf .libs _libs
++
++distclean-libtool:
++	-rm -f libtool
++uninstall-info-am:
++install-dceincludeHEADERS: $(dceinclude_HEADERS)
++	@$(NORMAL_INSTALL)
++	test -z "$(dceincludedir)" || $(mkdir_p) "$(DESTDIR)$(dceincludedir)"
++	@list='$(dceinclude_HEADERS)'; for p in $$list; do \
++	  if test -f "$$p"; then d=; else d="$(srcdir)/"; fi; \
++	  f=$(am__strip_dir) \
++	  echo " $(dceincludeHEADERS_INSTALL) '$$d$$p' '$(DESTDIR)$(dceincludedir)/$$f'"; \
++	  $(dceincludeHEADERS_INSTALL) "$$d$$p" "$(DESTDIR)$(dceincludedir)/$$f"; \
++	done
++
++uninstall-dceincludeHEADERS:
++	@$(NORMAL_UNINSTALL)
++	@list='$(dceinclude_HEADERS)'; for p in $$list; do \
++	  f=$(am__strip_dir) \
++	  echo " rm -f '$(DESTDIR)$(dceincludedir)/$$f'"; \
++	  rm -f "$(DESTDIR)$(dceincludedir)/$$f"; \
++	done
++
++ID: $(HEADERS) $(SOURCES) $(LISP) $(TAGS_FILES)
++	list='$(SOURCES) $(HEADERS) $(LISP) $(TAGS_FILES)'; \
++	unique=`for i in $$list; do \
++	    if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
++	  done | \
++	  $(AWK) '    { files[$$0] = 1; } \
++	       END { for (i in files) print i; }'`; \
++	mkid -fID $$unique
++tags: TAGS
++
++TAGS:  $(HEADERS) $(SOURCES)  $(TAGS_DEPENDENCIES) \
++		$(TAGS_FILES) $(LISP)
++	tags=; \
++	here=`pwd`; \
++	list='$(SOURCES) $(HEADERS)  $(LISP) $(TAGS_FILES)'; \
++	unique=`for i in $$list; do \
++	    if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
++	  done | \
++	  $(AWK) '    { files[$$0] = 1; } \
++	       END { for (i in files) print i; }'`; \
++	if test -z "$(ETAGS_ARGS)$$tags$$unique"; then :; else \
++	  test -n "$$unique" || unique=$$empty_fix; \
++	  $(ETAGS) $(ETAGSFLAGS) $(AM_ETAGSFLAGS) $(ETAGS_ARGS) \
++	    $$tags $$unique; \
++	fi
++ctags: CTAGS
++CTAGS:  $(HEADERS) $(SOURCES)  $(TAGS_DEPENDENCIES) \
++		$(TAGS_FILES) $(LISP)
++	tags=; \
++	here=`pwd`; \
++	list='$(SOURCES) $(HEADERS)  $(LISP) $(TAGS_FILES)'; \
++	unique=`for i in $$list; do \
++	    if test -f "$$i"; then echo $$i; else echo $(srcdir)/$$i; fi; \
++	  done | \
++	  $(AWK) '    { files[$$0] = 1; } \
++	       END { for (i in files) print i; }'`; \
++	test -z "$(CTAGS_ARGS)$$tags$$unique" \
++	  || $(CTAGS) $(CTAGSFLAGS) $(AM_CTAGSFLAGS) $(CTAGS_ARGS) \
++	     $$tags $$unique
++
++GTAGS:
++	here=`$(am__cd) $(top_builddir) && pwd` \
++	  && cd $(top_srcdir) \
++	  && gtags -i $(GTAGS_ARGS) $$here
++
++distclean-tags:
++	-rm -f TAGS ID GTAGS GRTAGS GSYMS GPATH tags
++
++distdir: $(DISTFILES)
++	@srcdirstrip=`echo "$(srcdir)" | sed 's|.|.|g'`; \
++	topsrcdirstrip=`echo "$(top_srcdir)" | sed 's|.|.|g'`; \
++	list='$(DISTFILES)'; for file in $$list; do \
++	  case $$file in \
++	    $(srcdir)/*) file=`echo "$$file" | sed "s|^$$srcdirstrip/||"`;; \
++	    $(top_srcdir)/*) file=`echo "$$file" | sed "s|^$$topsrcdirstrip/|$(top_builddir)/|"`;; \
++	  esac; \
++	  if test -f $$file || test -d $$file; then d=.; else d=$(srcdir); fi; \
++	  dir=`echo "$$file" | sed -e 's,/[^/]*$$,,'`; \
++	  if test "$$dir" != "$$file" && test "$$dir" != "."; then \
++	    dir="/$$dir"; \
++	    $(mkdir_p) "$(distdir)$$dir"; \
++	  else \
++	    dir=''; \
++	  fi; \
++	  if test -d $$d/$$file; then \
++	    if test -d $(srcdir)/$$file && test $$d != $(srcdir); then \
++	      cp -pR $(srcdir)/$$file $(distdir)$$dir || exit 1; \
++	    fi; \
++	    cp -pR $$d/$$file $(distdir)$$dir || exit 1; \
++	  else \
++	    test -f $(distdir)/$$file \
++	    || cp -p $$d/$$file $(distdir)/$$file \
++	    || exit 1; \
++	  fi; \
++	done
++check-am: all-am
++check: check-am
++all-am: Makefile $(HEADERS)
++installdirs:
++	for dir in "$(DESTDIR)$(dceincludedir)"; do \
++	  test -z "$$dir" || $(mkdir_p) "$$dir"; \
++	done
++install: install-am
++install-exec: install-exec-am
++install-data: install-data-am
++uninstall: uninstall-am
++
++install-am: all-am
++	@$(MAKE) $(AM_MAKEFLAGS) install-exec-am install-data-am
++
++installcheck: installcheck-am
++install-strip:
++	$(MAKE) $(AM_MAKEFLAGS) INSTALL_PROGRAM="$(INSTALL_STRIP_PROGRAM)" \
++	  install_sh_PROGRAM="$(INSTALL_STRIP_PROGRAM)" INSTALL_STRIP_FLAG=-s \
++	  `test -z '$(STRIP)' || \
++	    echo "INSTALL_PROGRAM_ENV=STRIPPROG='$(STRIP)'"` install
++mostlyclean-generic:
++
++clean-generic:
++
++distclean-generic:
++	-test -z "$(CONFIG_CLEAN_FILES)" || rm -f $(CONFIG_CLEAN_FILES)
++
++maintainer-clean-generic:
++	@echo "This command is intended for maintainers to use"
++	@echo "it deletes files that may require special tools to rebuild."
++clean: clean-am
++
++clean-am: clean-generic clean-libtool mostlyclean-am
++
++distclean: distclean-am
++	-rm -f Makefile
++distclean-am: clean-am distclean-generic distclean-libtool \
++	distclean-tags
++
++dvi: dvi-am
++
++dvi-am:
++
++html: html-am
++
++info: info-am
++
++info-am:
++
++install-data-am: install-dceincludeHEADERS
++
++install-exec-am:
++
++install-info: install-info-am
++
++install-man:
++
++installcheck-am:
++
++maintainer-clean: maintainer-clean-am
++	-rm -f Makefile
++maintainer-clean-am: distclean-am maintainer-clean-generic
++
++mostlyclean: mostlyclean-am
++
++mostlyclean-am: mostlyclean-generic mostlyclean-libtool
++
++pdf: pdf-am
++
++pdf-am:
++
++ps: ps-am
++
++ps-am:
++
++uninstall-am: uninstall-dceincludeHEADERS uninstall-info-am
++
++.PHONY: CTAGS GTAGS all all-am check check-am clean clean-generic \
++	clean-libtool ctags distclean distclean-generic \
++	distclean-libtool distclean-tags distdir dvi dvi-am html \
++	html-am info info-am install install-am install-data \
++	install-data-am install-dceincludeHEADERS install-exec \
++	install-exec-am install-info install-info-am install-man \
++	install-strip installcheck installcheck-am installdirs \
++	maintainer-clean maintainer-clean-generic mostlyclean \
++	mostlyclean-generic mostlyclean-libtool pdf pdf-am ps ps-am \
++	tags uninstall uninstall-am uninstall-dceincludeHEADERS \
++	uninstall-info-am
++
++# Tell versions [3.59,3.63) of GNU make to not export all variables.
++# Otherwise a system limit (for SysV at least) may be exceeded.
++.NOEXPORT:

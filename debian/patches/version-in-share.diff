@@ -1,0 +1,67 @@
+Author: Scott Salley <ssalley@beyondtrust.com>
+Description: Remove code that shouldn't be executed in this version and that may
+result in weird behavior.
+Forwarded: yes and checked-in
+Last-Update: 2011-07-28
+
+
+diff -Nurb likewise-open-6.1.0.48254.orig/domainjoin/libdomainjoin/src/djdistroinfo.c likewise-open-6.1.0.48254/domainjoin/libdomainjoin/src/djdistroinfo.c
+--- likewise-open-6.1.0.48254.orig/domainjoin/libdomainjoin/src/djdistroinfo.c	2010-07-29 17:27:56.000000000 -0700
++++ likewise-open-6.1.0.48254/domainjoin/libdomainjoin/src/djdistroinfo.c	2010-07-29 21:24:15.000000000 -0700
+@@ -653,7 +653,6 @@
+     PSTR line = NULL; 
+     BOOLEAN isEndOfFile = FALSE;
+     DWORD ceError = ERROR_SUCCESS;
+-    BOOLEAN bIsEnterprise = FALSE;
+ 
+     PSTR _product = NULL;
+     PSTR _version = NULL;
+@@ -667,15 +666,7 @@
+ #ifdef MINIMAL_JOIN
+     GCE(ceError = CTOpenFile(LOCALSTATEDIR "/VERSION", "r", &versionFile));
+ #else
+-    ceError = CTOpenFile(PREFIXDIR "/data/ENTERPRISE_VERSION", "r", &versionFile);
+-    if (ceError == 0)
+-    {
+-        bIsEnterprise = TRUE;
+-    }
+-    else
+-    {
+-        GCE(ceError = CTOpenFile(PREFIXDIR "/data/VERSION", "r", &versionFile));
+-    }
++    GCE(ceError = CTOpenFile(PREFIXDIR "/share/likewise-open/VERSION", "r", &versionFile));
+ #endif
+ 
+     while (TRUE)
+@@ -701,14 +692,8 @@
+         }
+     }
+ 
+-    if (bIsEnterprise)
+-    {
+-        GCE(ceError = CTStrdup("Enterprise", &_product));
+-    }
+-    else
+-    {
+         GCE(ceError = CTStrdup("Open", &_product));
+-    }
++
+     if (_version == NULL)
+     {
+         GCE(ceError = CTStrdup("unknown", &_version));@@ -645,7 +645,7 @@
+diff -Nurb likewise-open-6.1.0.48254.orig/lsass/common/utils/lsastatus.c likewise-open-6.1.0.48254/lsass/common/utils/lsastatus.c
+--- likewise-open-6.1.0.48254.orig/lsass/common/utils/lsastatus.c	2010-07-29 17:27:57.000000000 -0700
++++ likewise-open-6.1.0.48254/lsass/common/utils/lsastatus.c	2010-07-29 21:24:39.000000000 -0700
+@@ -99,11 +99,7 @@
+ #ifdef MINIMAL_LSASS
+     versionFile = open(LOCALSTATEDIR "/VERSION", O_RDONLY, 0);
+ #else
+-    versionFile = open(PREFIXDIR "/data/ENTERPRISE_VERSION", O_RDONLY, 0);
+-    if (versionFile < 0 && errno == ENOENT)
+-    {
+-        versionFile = open(PREFIXDIR "/data/VERSION", O_RDONLY, 0);
+-    }
++    versionFile = open(PREFIXDIR "/share/likewise-open/VERSION", O_RDONLY, 0);
+ #endif
+     if (versionFile < 0)
+     {

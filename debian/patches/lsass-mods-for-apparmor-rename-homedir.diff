@@ -1,0 +1,79 @@
+Author: Scott Salley <ssalley@beyondtrust.com>
+Description: Set defaults to something reasonable for Ubuntu.
+Forwarded: not-needed
+Last-Update: 2011-07-15
+
+diff -Nurb likewise-open.orig/lsass/etc/lsassd.reg.in likewise-open/lsass/etc/lsassd.reg.in
+--- likewise-open.orig/lsass/etc/lsassd.reg.in	2011-04-28 17:27:57.000000000 -0700
++++ likewise-open/lsass/etc/lsassd.reg.in	2011-04-28 11:00:33.000000000 -0700
+@@ -122,7 +122,7 @@
+     doc = ""
+ }
+ "LoginShellTemplate" = {
+-    default = "/bin/sh"
++    default = "/bin/bash"
+     doc = ""
+ }
+ "HomeDirPrefix" = {
+@@ -130,7 +130,7 @@
+     doc = ""
+ }
+ "HomeDirTemplate" = {
+-    default = "%H/local/%D/%U"
++    default = "%H/likewise-open/%D/%U"
+     doc = ""
+ }
+ "LdapSignAndSeal" = {
+@@ -267,7 +267,7 @@
+     doc = ""
+ }
+ "LoginShellTemplate" = {
+-    default = "/bin/sh"
++    default = "/bin/bash"
+     doc = ""
+ }
+ "HomeDirPrefix" = {
+@@ -275,7 +275,7 @@
+     doc = "Prefix path for user's home directory. This value is used in place of the %H in the HomeDirTemplate setting. Value must be an absolute path."
+ }
+ "HomeDirTemplate" = {
+-    default = "%H/local/%D/%U"
++    default = "%H/likewise-open/%D/%U"
+     doc = "Format string for user's home directory path. This value can contain substitution string markers for HomeDirPrefix (%H), Domain (%D), and User (%U)."
+ }
+ "CreateHomeDir" = {
+@@ -355,7 +355,7 @@
+     doc = ""
+ }
+ "LoginShellTemplate" = {
+-    default = "/bin/sh"
++    default = "/bin/bash"
+     doc = ""
+ }
+ "HomeDirPrefix" = {
+@@ -363,7 +363,7 @@
+     doc = "Default login shell template"
+ }
+ "HomeDirTemplate" = {
+-    default = "%H/local/%D/%U"
++    default = "%H/likewise-open/%D/%U"
+     doc = ""
+ }
+ "RegisterTcpIp" = {
+diff -Nurb likewise-open.orig/lsass/server/auth-providers/ad-open-provider/addef.h likewise-open/lsass/server/auth-providers/ad-open-provider/addef.h
+--- likewise-open.orig/lsass/server/auth-providers/ad-open-provider/addef.h	2011-04-28 17:27:57.000000000 -0700
++++ likewise-open/lsass/server/auth-providers/ad-open-provider/addef.h	2011-04-28 11:00:58.000000000 -0700
+@@ -48,11 +48,11 @@
+ #ifndef __AD_DEF_H__
+ #define __AD_DEF_H__
+ 
+-#define AD_DEFAULT_SHELL            "/bin/sh"
++#define AD_DEFAULT_SHELL            "/bin/bash"
+ 
+ #define AD_DEFAULT_UMASK            022
+ 
+-#define AD_DEFAULT_HOMEDIR_TEMPLATE "%H/local/%D/%U"
++#define AD_DEFAULT_HOMEDIR_TEMPLATE "%H/likewise-open/%D/%U"
+ 
+ #define AD_CACHE_ENTRY_EXPIRY_MINIMUM_SECS   (0)
+ #define AD_CACHE_ENTRY_EXPIRY_DEFAULT_SECS   (4 * LSA_SECONDS_IN_HOUR)

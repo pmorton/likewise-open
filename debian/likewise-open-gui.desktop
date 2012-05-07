@@ -1,0 +1,9 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=Active Directory membership
+Comment=Join or leave an Active Directory domain using Likewise-Open
+Exec=/usr/bin/gksu /usr/bin/domainjoin-gui
+Terminal=false
+Type=Application
+Icon=/usr/share/likewise-open/domainjoin-logo.png
+Categories=System;Settings;

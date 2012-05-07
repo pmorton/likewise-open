@@ -1,0 +1,42 @@
+## Description: add some description
+## Origin/Author: add some origin or author
+## Bug: bug URL
+Index: likewise-open-6.0.0.53010/lsass/configure.in
+===================================================================
+--- likewise-open-6.0.0.53010.orig/lsass/configure.in	2011-03-02 18:55:00.427657579 +0200
++++ likewise-open-6.0.0.53010/lsass/configure.in	2011-03-02 18:54:35.831535637 +0200
+@@ -74,6 +74,14 @@
+                 ENABLE_NSS_ENUM_DEFAULT="no"
+                 AC_DEFINE([__LWI_LINUX__], [], [Define if OS is Linux])
+                 ;;
++        linux*:arm*)
++                echo "Detected Linux - ARM"
++                nss_libdir="/lib"
++                pam_libdir="/lib/security"
++                NSS_SUBDIR="linux"
++                ENABLE_NSS_ENUM_DEFAULT="no"
++                AC_DEFINE([__LWI_LINUX__], [], [Define if OS is Linux])
++                ;;
+         linux*:s390*)
+                 echo "Detected Linux - s390*"
+                 nss_libdir="/lib64"
+Index: likewise-open-6.0.0.53010/lsass/server/lsassd/backtrace.c
+===================================================================
+--- likewise-open-6.0.0.53010.orig/lsass/server/lsassd/backtrace.c	2010-10-19 23:54:28.000000000 +0300
++++ likewise-open-6.0.0.53010/lsass/server/lsassd/backtrace.c	2011-03-02 18:53:45.231284697 +0200
+@@ -90,12 +90,9 @@
+ #elif defined(REG_RIP)
+         // Linux 64bit instruction pointer
+         ppFunctions[1] = (void *)pContext->uc_mcontext.gregs[REG_RIP];
+-#elif defined(HAVE_UCONTEXT_T_UC_MCONTEXT____SS___RIP)
+-        // Mac 64bit instruction pointer
+-        ppFunctions[1] = (void *)pContext->uc_mcontext->__ss.__rip;
+-#elif defined(HAVE_UCONTEXT_T_UC_MCONTEXT____SS___EIP)
+-        // Mac 32bit instruction pointer
+-        ppFunctions[1] = (void *)pContext->uc_mcontext->__ss.__eip;
++#elif defined(__ARMEL__)
++        // Linux ARM 32bit instruction pointer
++        ppFunctions[1] = (void*)pContext->uc_mcontext.arm_pc;
+ #else
+         // Linux 32bit instruction pointer
+         ppFunctions[1] = (void *)pContext->uc_mcontext.gregs[REG_EIP];

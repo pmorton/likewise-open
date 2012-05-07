@@ -1,0 +1,17 @@
+Author: Scott Salley <ssalley@beyondtrust.com>
+Description: Satisfy dependencies the gold linker is picky about.
+Forwarded: yes and checked-in
+Last-Update: 2011-07-28
+
+diff -Nurb likewise-open-6.1.0.406/lwnetapi/test/MakeKitBuild likewise-open-6.1.0.406.new/lwnetapi/test/MakeKitBuild
+--- likewise-open-6.1.0.406/lwnetapi/test/MakeKitBuild	2011-07-27 12:02:57.000000000 -0700
++++ likewise-open-6.1.0.406.new/lwnetapi/test/MakeKitBuild	2011-07-28 17:00:52.000000000 -0700
+@@ -18,7 +18,7 @@
+         HEADERDEPS="lw/base.h lwadvapi.h openssl/rand.h lwio/lwio.h dce/rpc.h \
+                     lw/rpc/common.h lw/rpc/samr.h lw/rpc/lsa.h lw/rpc/wkssvc.h \
+                     lwnet.h ntlm/gssntlm.h ntlm/sspintlm.h lsa/ad.h" \
+-        LIBDEPS="lwnetclientapi lwadvapi lwbase lsarpc dcerpc lwnetapi lsaclient"
++        LIBDEPS="lwnetclientapi lwadvapi lwadvapi_nothr lwbase lwbase_nothr lsarpc dcerpc lwnetapi lsaclient lwioclient crypto"
+ 
+     lw_add_tool_target "$result"
+ }

@@ -529,7 +529,7 @@ LdapMachDnsNameSearch(
 
     int lderr = LDAP_SUCCESS;
     DWORD dwError = ERROR_SUCCESS;
-    size_t dnsname_len = 0;
+    /*size_t dnsname_len = 0;*/
     wchar16_t *dnsname = NULL;
     char *basedn = NULL;
     wchar16_t *filterw16 = NULL;
@@ -554,7 +554,7 @@ LdapMachDnsNameSearch(
         BAIL_ON_LSA_ERROR(dwError);
     }
 
-    dnsname_len = wc16slen(dnsname);
+    /*dnsname_len = wc16slen(dnsname);*/
 
     dwError = LwAllocateWc16sPrintfW(
                     &filterw16,

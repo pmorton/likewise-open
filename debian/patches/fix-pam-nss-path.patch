@@ -1,0 +1,19 @@
+Author: Scott Salley <ssalley@beyondtrust.com>
+Description: Path substitution was not handled right so use a hard coded value.
+Forwarded: not-needed
+Last-Update: 2011-07-15
+
+diff -Nurb likewise-open-6.1.0.59287.orig/lsass/MakeKitBuild likewise-open-6.1.0.59287/lsass/MakeKitBuild
+--- likewise-open-6.1.0.59287.orig/lsass/MakeKitBuild	2011-05-16 10:26:04.000000000 -0700
++++ likewise-open-6.1.0.59287/lsass/MakeKitBuild	2011-05-16 11:49:15.000000000 -0700
+@@ -63,8 +63,8 @@
+     mk_multiarch_do
+         case "$MK_OS:$MK_ISA" in
+             linux:*)
+-                PAMDIR="/${MK_LIBDIR##*/}/security"
+-                NSSDIR="/${MK_LIBDIR##*/}"
++                PAMDIR="/lib/security"
++                NSSDIR="/lib"
+                 ;;
+             freebsd:*)
+                 PAMDIR="/usr/local/${MK_LIBDIR##*/}"

@@ -1,0 +1,18 @@
+Author: Scott Salley <ssalley@beyondtrust.com>
+Description: Patch the root MakeKitBuild for the gssspnego plugin and
+lwreg/libedit
+Forwarded: yes
+Last-Update: 2011-07-29
+
+diff -Nurb likewise-open-6.1.0.406/MakeKitBuild likewise-open-6.1.0.406.new/MakeKitBuild
+--- likewise-open-6.1.0.406/MakeKitBuild	2011-07-27 12:02:16.000000000 -0700
++++ likewise-open-6.1.0.406.new/MakeKitBuild	2011-07-28 15:42:29.000000000 -0700
+@@ -3,7 +3,7 @@
+ LW_ALL_BUNDLED="krb5 cyrus-sasl openldap libiconv \
+                 sqlite libuuid openssl curl libxml2"
+ SUBDIRS="$LW_ALL_BUNDLED \
+-         lwbase lwmsg lwreg lwadvapi netlogon \
++         gssspnego-cyrus-sasl lwbase lwmsg libedit lwreg lwadvapi netlogon \
+          lwio libschannel dcerpc centutils lwsm eventlog lsass lwdns \
+          lwnetapi domainjoin lwconfig lwupgrade samba-interop config package"
+ 

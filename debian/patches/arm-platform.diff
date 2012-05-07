@@ -1,0 +1,12 @@
+--- ./makekit/mk/module/platform.sh~	2011-07-27 21:00:51.000000000 +0200
++++ ./makekit/mk/module/platform.sh	2011-09-06 19:27:14.491409102 +0200
+@@ -402,6 +402,9 @@
+                 ppc)
+                     _default_MK_BUILD_ARCH="powerpc"
+                     ;;
++                arm*)
++                    _default_MK_BUILD_ARCH="arm"
++                    ;;
+                 *)
+                     mk_fail "unknown architecture: `uname -m`"
+                     ;;

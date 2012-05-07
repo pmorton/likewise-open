@@ -126,7 +126,7 @@
     doc = ""
 }
 "LoginShellTemplate" = {
-    default = "/bin/sh"
+    default = "/bin/bash"
     doc = ""
 }
 "HomeDirPrefix" = {
@@ -134,7 +134,7 @@
     doc = ""
 }
 "HomeDirTemplate" = {
-    default = "%H/local/%D/%U"
+    default = "%H/likewise-open/%D/%U"
     doc = ""
 }
 "LdapSignAndSeal" = {
@@ -271,7 +271,7 @@
     doc = ""
 }
 "LoginShellTemplate" = {
-    default = "/bin/sh"
+    default = "/bin/bash"
     doc = ""
 }
 "HomeDirPrefix" = {
@@ -279,7 +279,7 @@
     doc = "Prefix path for user's home directory. This value is used in place of the %H in the HomeDirTemplate setting. Value must be an absolute path."
 }
 "HomeDirTemplate" = {
-    default = "%H/local/%D/%U"
+    default = "%H/likewise-open/%D/%U"
     doc = "Format string for user's home directory path. This value can contain substitution string markers for HomeDirPrefix (%H), Domain (%D), and User (%U)."
 }
 "CreateHomeDir" = {
@@ -363,7 +363,7 @@
     doc = ""
 }
 "LoginShellTemplate" = {
-    default = "/bin/sh"
+    default = "/bin/bash"
     doc = ""
 }
 "HomeDirPrefix" = {
@@ -371,7 +371,7 @@
     doc = "Default login shell template"
 }
 "HomeDirTemplate" = {
-    default = "%H/local/%D/%U"
+    default = "%H/likewise-open/%D/%U"
     doc = ""
 }
 "RegisterTcpIp" = {

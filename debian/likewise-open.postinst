@@ -1,0 +1,234 @@
+#!/bin/sh
+
+UPGRADEDIR4="/etc/likewise-open/4_1_upgrade"
+UPGRADEDIR5="/etc/likewise-open/5_0_upgrade"
+
+CONVERT=/usr/bin/conf2reg
+DOMAINJOIN=/usr/bin/domainjoin-cli
+REGSHELL=/usr/bin/lwregshell
+LOG=/var/log/likewise-open-install.log
+TLOG=/tmp/LikewiseOpenTemp.txt
+
+# Display to screen and log file with a blank line between entries.
+log()
+{
+    echo $@
+    echo
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+# Display to screen and log file with no blank line.
+_log()
+{
+    echo $@
+    echo $@ >> $LOG
+}
+
+# Display to file.
+logfile()
+{
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file.
+run()
+{
+    "$@" > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Error: $@ returned $err"
+        _log `cat $TLOG`
+        _log
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# Log only to file.
+run_quiet()
+{
+    "$@" > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+    else
+        echo "Error: $@ returned $err  (ignoring and continuing)" >> $LOG
+    fi
+    cat $TLOG >> $LOG
+    echo >> $LOG
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file and then exit.
+run_or_fail()
+{
+    "$@" > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Error: $@ returned $err  (aborting this script)"
+        _log `cat $TLOG`
+        _log
+        rm -f $TLOG > /dev/null 2>&1
+        exit 1
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+import_machine_account_4_1()
+{
+    run "$CONVERT" --lwiauth "${UPGRADEDIR4}/lwiauthd.conf" "${UPGRADEDIR4}/secrets.tdb" /etc/likewise-open/lwiauthd.reg
+
+    run rm -rf "${UPGRADEDIR4}"
+
+    if [ -f /etc/likewise-open/lwiauthd.reg ]; then
+        run_or_fail "$REGSHELL" upgrade /etc/likewise-open/lwiauthd.reg
+    fi
+}
+
+convert_import()
+{
+    COMMAND=$1
+    SOURCE=$2
+    # DEST is not necessary for some commands.
+    DEST=$3
+
+    if [ -f $SOURCE ]; then
+        run "$CONVERT" "$COMMAND" "$SOURCE" "$DEST"
+        if [ -n "$DEST" -a -f "$DEST" ]; then
+            run_or_fail "$REGSHELL" upgrade "$DEST"
+        fi
+    fi
+}
+
+import_machine_account_5_0()
+{
+    convert_import --lsass "${UPGRADEDIR5}/lsassd.conf" \
+        "/usr/share/likewise-open/config/lsassd.conf.reg"
+
+    convert_import --eventlog "${UPGRADEDIR5}/eventlogd.conf" \
+        "/usr/share/likewise-open/config/eventlogd.conf.reg"
+
+    convert_import --netlogon "${UPGRADEDIR5}/netlogon.conf" \
+        "/usr/share/likewise-open/config/netlogon.conf.reg"
+
+    # Bring machine account into registry
+    convert_import --pstore-sqlite "${UPGRADEDIR5}/pstore.db"
+
+    run "rm -rf ${UPGRADEDIR5}"
+}
+
+import_registry_configurations()
+{
+    log 'Importing registry...'
+    run_or_fail "$REGSHELL" import /usr/share/likewise-open/config/dcerpcd.reg
+    run_or_fail "$REGSHELL" import /usr/share/likewise-open/config/eventlogd.reg
+    run_or_fail "$REGSHELL" import /usr/share/likewise-open/config/lsassd.reg
+    run_or_fail "$REGSHELL" import /usr/share/likewise-open/config/lwiod.reg
+    run_or_fail "$REGSHELL" import /usr/share/likewise-open/config/lwreg.reg
+    run_or_fail "$REGSHELL" import /usr/share/likewise-open/config/netlogond.reg
+}
+
+fix_old_registry()
+{
+    DomainSeparator=`$REGSHELL list_values '[HKEY_THIS_MACHINE\Services\lsass\Parameters\Providers\ActiveDirectory]' | grep DomainSeparator | sed -e 's/ *[^ ]\+[ ]\+[^ ]\+[ ]\+"\([^ ]*\)"$/\1/'`
+    SpaceReplacement=`$REGSHELL list_values '[HKEY_THIS_MACHINE\Services\lsass\Parameters\Providers\ActiveDirectory]' | grep SpaceReplacement | sed -e 's/ *[^ ]\+[ ]\+[^ ]\+[ ]\+"\([^ ]*\)"$/\1/'`
+    if [ -n "${DomainSeparator}" ]; then
+        if [ "$DomainSeparator" = "\\\\" ]; then
+            DomainSeparator="\\"
+        fi
+        $REGSHELL set_value '[HKEY_THIS_MACHINE\Services\lsass\Parameters]' 'DomainSeparator' "$DomainSeparator"
+    fi
+    if [ -n "${SpaceReplacement}" ]; then
+        $REGSHELL set_value '[HKEY_THIS_MACHINE\Services\lsass\Parameters]' 'SpaceReplacement' "$SpaceReplacement"
+    fi
+}
+
+remove_npfs_dependencies()
+{
+    run_quiet '/usr/bin/lwregshell' set_value '[HKEY_THIS_MACHINE\Services\lwio\Parameters\Drivers]' 'Load' 'rdr'
+    run_quiet '/usr/bin/lwregshell' set_value '[HKEY_THIS_MACHINE\Services\lsass]' 'Dependencies' 'netlogon lwio lwreg rdr'
+}
+
+switch_to_open_provider()
+{
+    _value='[HKEY_THIS_MACHINE\Services\lsass\Parameters\Providers\ActiveDirectory]'
+    _path='/usr/lib/likewise-open/liblsass_auth_provider_ad_open.so'
+
+    run_or_fail "$REGSHELL" set_value "$_value" Path "$_path"
+}
+
+case "$1" in
+    abort-upgrade)
+        logfile "### likewise-open.postinst abort-upgrade"
+
+        if dpkg --compare-versions "$2" le "4.1.2982-0ubuntu3"; then
+            if [ -f /etc/init.d/likewise-open ]; then
+                run /usr/sbin/update-rc.d start likewise-open
+            fi
+
+            run rm -rf "${UPGRADEDIR4}"
+        fi
+        exit 0
+    ;;
+
+    configure)
+        logfile "### likewise-open.postinst configure"
+
+        run_or_fail /usr/sbin/lwsmd --start-as-daemon
+
+        if [ -n "$2" ]; then
+            if dpkg --compare-versions "$2" le "4.1.2982-0ubuntu3"; then
+                if [ -f "${UPGRADEDIR4}/lwiauthd.conf" -a \
+                     -f "${UPGRADEDIR4}/secrets.tdb" ]; then
+                    import_machine_account_4_1
+                fi
+            fi
+        else
+            if [ -d "${UPGRADEDIR5}" ]; then
+                import_machine_account_5_0
+            fi
+        fi
+
+        import_registry_configurations
+
+        fix_old_registry
+
+        remove_npfs_dependencies
+
+        switch_to_open_provider
+
+        run_or_fail /usr/bin/lwsm shutdown
+
+        run /usr/sbin/update-rc.d -f lwsmd defaults 19 9
+        run /usr/sbin/update-rc.d -f likewise defaults 20 8
+
+        run /usr/sbin/service lwsmd start
+        run /usr/sbin/service likewise start
+
+        run "$DOMAINJOIN" configure --enable nsswitch
+        run "$DOMAINJOIN" configure --enable ssh
+        run "$DOMAINJOIN" configure --long `hostname --long` --short `hostname --short` --enable krb5
+
+        run_or_fail pam-auth-update --package
+        exit 0
+    ;;
+esac
+
+#DEBHELPER#

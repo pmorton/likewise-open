@@ -1,0 +1,16 @@
+etc/likewise-open/*
+usr/bin/*
+usr/sbin/*
+usr/lib/likewise-open/*
+usr/libexec/likewise-open/*
+usr/share/likewise-open/*
+var/lib/likewise-open/*
+
+etc/apparmor.d/tunables/home.d/likewise-open
+etc/init.d/lwsmd
+etc/init.d/likewise
+
+lib/libnss_lsass.so*
+lib/security/pam_lsass.so
+usr/share/pam-configs/likewise-open
+

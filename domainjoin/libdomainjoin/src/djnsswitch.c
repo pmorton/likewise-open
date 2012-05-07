@@ -1009,14 +1009,14 @@ static void ConfigureApparmor(BOOLEAN enable, LWException **exc)
 PREFIXDIR "/lib/*.so*            mr,\n"
 PREFIXDIR "/lib64/*.so*          mr,\n"
 "/tmp/.lwidentity/pipe              rw,\n"
-LOCALSTATEDIR "/lib/likewise/.lsassd  rw,\n"
+LOCALSTATEDIR "/.lsassd  rw,\n"
 LOCALSTATEDIR "/tmp/.lsaclient_*              rw,\n";
     else
         addString =
 PREFIXDIR "/lib/*.so*            r,\n"
 PREFIXDIR "/lib64/*.so*          r,\n"
 "/tmp/.lwidentity/pipe              rw,\n"
-LOCALSTATEDIR "/lib/likewise/.lsassd  rw,\n"
+LOCALSTATEDIR "/.lsassd  rw,\n"
 LOCALSTATEDIR "/tmp/.lsaclient_*              rw,\n";
 
 
@@ -1024,7 +1024,7 @@ LOCALSTATEDIR "/tmp/.lsaclient_*              rw,\n";
     {
         LW_CLEANUP_CTERR(exc, CTCopyFileWithOriginalPerms(finalName, tempName));
         LW_CLEANUP_CTERR(exc, CTOpenFile(tempName, "a", &file));
-        LW_CLEANUP_CTERR(exc, CTFilePrintf(file, "# likewise\n%s# end likewise\n",
+        LW_CLEANUP_CTERR(exc, CTFilePrintf(file, "# -start- likewise\n%s# -end- likewise\n",
                     addString));
 
         CTSafeCloseFile(&file);
@@ -1033,7 +1033,7 @@ LOCALSTATEDIR "/tmp/.lsaclient_*              rw,\n";
     }
     else
     {
-        LW_CLEANUP_CTERR(exc, CTRunSedOnFile(finalName, finalName, FALSE, "/^[ \t]*#[ \t]*likewise[ \t]*$/,/^[ \t]*#[ \t]*end likewise[ \t]*$/d"));
+        LW_CLEANUP_CTERR(exc, CTRunSedOnFile(finalName, finalName, FALSE, "/^[ \t]*#[ \t]*-start- likewise[ \t]*$/,/^[ \t]*#[ \t]*-end- likewise[ \t]*$/d"));
         LW_CLEANUP_CTERR(exc, CTRunSedOnFile(finalName, finalName, FALSE, "/^[ \t]*#[ \t]*centeris[ \t]*$/,/^[ \t]*#[ \t]*end centeris[ \t]*$/d"));
     }
 

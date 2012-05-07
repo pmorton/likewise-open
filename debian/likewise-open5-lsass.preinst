@@ -1,0 +1,169 @@
+#!/bin/sh
+
+UPGRADEDIR5="/etc/likewise-open/5_0_upgrade"
+
+LOG=/var/log/likewise-open-install.log
+TLOG=/tmp/likewise-open-install.txt
+
+# Not all daemons in the list were 'officially' released on Ubuntu. But it
+# should not hurt to have them listed.
+DAEMONS_TO_HALT="likewise-winbindd lwsmd lwregd netlogond lwiod dcerpcd eventlogd lsassd"
+
+# Display to screen and log file with a blank line.
+log()
+{
+    echo $@
+    echo
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+_log()
+{
+    echo $@
+    echo $@ >> $LOG
+}
+
+# Display to file.
+logfile()
+{
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file.
+exec_log()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Warning: $@ returned $err"
+        _log `cat $TLOG`
+        _log
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# Log only to file.
+exec_logfile()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+    else
+        echo "Warning: $@ returned $err" >> $LOG
+    fi
+    cat $TLOG >> $LOG
+    echo >> $LOG
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file and then exit.
+exec_log_exit()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Error: $@ returned $err"
+        _log `cat $TLOG`
+        _log
+        rm -f $TLOG > /dev/null 2>&1
+        exit 1
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+save_5_0_files()
+{
+    OLDCONFDIR=/etc/likewise-open5
+    OLDVARDIR=/var/lib/likewise-open5
+
+    if [ -f "${OLDCONFDIR}/lsassd.conf" ]; then
+        exec_log_exit "mkdir -p ${UPGRADEDIR5}"
+        exec_log_exit "cp ${OLDCONFDIR}/lsassd.conf ${UPGRADEDIR5}"
+    fi
+
+    if [ -f "${OLDCONFDIR}/eventlogd.conf" ]; then
+        exec_log_exit "mkdir -p ${UPGRADEDIR5}"
+        exec_log_exit "cp ${OLDCONFDIR}/eventlogd.conf ${UPGRADEDIR5}"
+    fi
+
+    if [ -f "${OLDCONFDIR}/netlogon.conf" ]; then
+        exec_log_exit "mkdir -p ${UPGRADEDIR5}"
+        exec_log_exit "cp ${OLDCONFDIR}/netlogon.conf ${UPGRADEDIR5}"
+    fi
+
+    if [ -f "${OLDVARDIR}/db/pstore.db" ]; then
+        exec_log_exit "mkdir -p ${UPGRADEDIR5}"
+        exec_log_exit "cp ${OLDVARDIR}/db/pstore.db ${UPGRADEDIR5}"
+        exec_log_exec "chmod 600 ${UPGRADEDIR5}pstore.db"
+    fi
+}
+
+case "$1" in
+    abort-upgrade)
+    logfile "### likewise-open5-lsass.preinst abort-upgrade"
+    exec_log_exit "pam-auth-update --package likewise-open5-lsass"
+    return 0
+    ;;
+
+    upgrade)
+    logfile "### likewise-open5-lsass.preinst upgrade"
+
+    if [ -n "$2" ]; then
+        if dpkg --compare-versions "$2" le "5.0.3991.1+krb5-0ubuntu2"; then
+
+            exec_log_exit "pam-auth-update --package --remove likewise-open5-lsass"
+
+            #### AGGRESIVELY STOP LIKEWISE DAEMONS ####
+            # There are many user reports that indicate there is a
+            # misbehaving daemon that interferes with installs/upgrades.
+            logfile "Snapshot of processes before stopping daemons"
+            exec_logfile "ps ax"
+
+            # Shutdown old daemons nicely
+            if [ -f /etc/init.d/lsassd ]
+            then
+                exec_log "/etc/init.d/lsassd stop"
+            fi
+
+            for daemon in $DAEMONS_TO_HALT
+            do
+                if [ -x /etc/init.d/$daemon ]; then
+                    exec_logfile "/etc/init.d/$daemon stop"
+                fi
+                exec_logfile "pkill -TERM -x $daemon"
+                exec_logfile "pkill -KILL -x $daemon"
+            done
+
+            logfile "Snapshot of processes after stopping daemons"
+            exec_logfile "ps ax"
+
+            save_5_0_files
+
+            exec_log "/usr/bin/domainjoin-cli leave"
+            return 0
+        fi
+    fi
+    ;;
+
+esac
+
+#DEBHELPER#

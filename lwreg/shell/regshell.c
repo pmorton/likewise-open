@@ -49,6 +49,7 @@
 #define _LW_DEBUG 1
 #endif
 #define REGSHELL_ESC_CHAR '|'
+#define EL_ESC_CHAR     23
 
 static int gCaughtSignal;
 

@@ -1,0 +1,102 @@
+diff -Nurb likewise-open-6.1.0.48254.orig/lsass/etc/lsassd.reg.in likewise-open-6.1.0.48254/lsass/etc/lsassd.reg.in
+--- likewise-open-6.1.0.48254.orig/lsass/etc/lsassd.reg.in	2010-07-29 17:27:57.000000000 -0700
++++ likewise-open-6.1.0.48254/lsass/etc/lsassd.reg.in	2010-07-30 11:00:33.000000000 -0700
+@@ -37,9 +37,9 @@
+ "Id"="lsa-activedirectory-provider"
+ "Path"="@providerdir@/liblsass_auth_provider_ad_open@MOD_EXT@"
+ "LogNetworkConnectionEvents"=dword:00000001
+-"LoginShellTemplate"="/bin/sh"
++"LoginShellTemplate"="/bin/bash"
+ "HomeDirPrefix"="@default_homedir_prefix@"
+-"HomeDirTemplate"="%H/local/%D/%U"
++"HomeDirTemplate"="%H/likewise-open/%D/%U"
+ "LdapSignAndSeal"=dword:00000000
+ "CacheEntryExpiry"=dword:00003840
+ "MachinePasswordLifespan"=dword:00278D00
+@@ -64,9 +64,9 @@
+ [HKEY_THIS_MACHINE\Services\lsass\Parameters\Providers\Local]
+ "Id"="lsa-local-provider"
+ "Path"="@providerdir@/liblsass_auth_provider_local@MOD_EXT@"
+-"LoginShellTemplate"="/bin/sh"
++"LoginShellTemplate"="/bin/bash"
+ "HomeDirPrefix"="@default_homedir_prefix@"
+-"HomeDirTemplate"="%H/local/%D/%U"
++"HomeDirTemplate"="%H/likewise-open/%D/%U"
+ "CreateHomeDir"=dword:00000001
+ "HomeDirUmask"="022"
+ "SkeletonDirs"="@default_skeldirs@"
+@@ -92,9 +92,9 @@
+ [HKEY_THIS_MACHINE\Services\lsass\Parameters\RPCServers\samr]
+ "Path"="@rpcserverdir@/libsamr_srv@MOD_EXT@"
+ "LpcSocketPath"="@CACHEDIR@/rpc/lsass"
+-"LoginShellTemplate"="/bin/sh"
++"LoginShellTemplate"="/bin/bash"
+ "HomeDirPrefix"="@default_homedir_prefix@"
+-"HomeDirTemplate"="%H/local/%D/%U"
++"HomeDirTemplate"="%H/likewise-open/%D/%U"
+ "RegisterTcpIp"=dword:00000000
+ 
+ [HKEY_THIS_MACHINE\Services\lsass\Parameters\RPCServers\dssetup]
+diff -Nurb likewise-open-6.1.0.48254.orig/lsass/server/auth-providers/ad-open-provider/addef.h likewise-open-6.1.0.48254/lsass/server/auth-providers/ad-open-provider/addef.h
+--- likewise-open-6.1.0.48254.orig/lsass/server/auth-providers/ad-open-provider/addef.h	2010-07-29 17:27:57.000000000 -0700
++++ likewise-open-6.1.0.48254/lsass/server/auth-providers/ad-open-provider/addef.h	2010-07-30 11:05:16.000000000 -0700
+@@ -53,11 +53,11 @@
+ 
+ #define AD_BUILTIN_GROUP_SID_PREFIX "S-1-5-32-"
+ 
+-#define AD_DEFAULT_SHELL            "/bin/sh"
++#define AD_DEFAULT_SHELL            "/bin/bash"
+ 
+ #define AD_DEFAULT_UMASK            022
+ 
+-#define AD_DEFAULT_HOMEDIR_TEMPLATE "%H/local/%D/%U"
++#define AD_DEFAULT_HOMEDIR_TEMPLATE "%H/likewise-open/%D/%U"
+ 
+ #define AD_CACHE_REAPER_TIMEOUT_MINIMUM_SECS (5 * LSA_SECONDS_IN_MINUTE)
+ #define AD_CACHE_REAPER_TIMEOUT_DEFAULT_SECS (30 * LSA_SECONDS_IN_DAY)
+diff -Nurb likewise-open-6.1.0.48254.orig/lsass/server/auth-providers/local-provider/lpdefs.h.in likewise-open-6.1.0.48254/lsass/server/auth-providers/local-provider/lpdefs.h.in
+--- likewise-open-6.1.0.48254.orig/lsass/server/auth-providers/local-provider/lpdefs.h.in	2010-07-29 17:27:57.000000000 -0700
++++ likewise-open-6.1.0.48254/lsass/server/auth-providers/local-provider/lpdefs.h.in	2010-07-30 11:06:05.000000000 -0700
+@@ -50,9 +50,9 @@
+ #define LOCAL_CFG_TAG_LOCAL_PROVIDER "lsa-local-provider"
+ #define LOCAL_CFG_TAG_AUTH_PROVIDER  "auth provider"
+ 
+-#define LOCAL_CFG_DEFAULT_LOGIN_SHELL             "/bin/sh"
++#define LOCAL_CFG_DEFAULT_LOGIN_SHELL             "/bin/bash"
+ #define LOCAL_CFG_DEFAULT_HOMEDIR_PREFIX          "@default_homedir_prefix@"
+-#define LOCAL_CFG_DEFAULT_HOMEDIR_TEMPLATE        "%H/%U"
++#define LOCAL_CFG_DEFAULT_HOMEDIR_TEMPLATE        "%H/likewise-open/%D/%U"
+ #define LOCAL_CFG_DEFAULT_SKELETON_DIRS           "@default_skeldirs@"
+ #define LOCAL_CFG_DEFAULT_ACCEPT_NTLMV1           TRUE
+ #define LOCAL_CFG_DEFAULT_CREATE_HOMEDIR          TRUE
+diff -Nurb likewise-open-6.1.0.48254.orig/lsass/server/rpc/samr/samrdefs.h likewise-open-6.1.0.48254/lsass/server/rpc/samr/samrdefs.h
+--- likewise-open-6.1.0.48254.orig/lsass/server/rpc/samr/samrdefs.h	2010-07-29 17:27:58.000000000 -0700
++++ likewise-open-6.1.0.48254/lsass/server/rpc/samr/samrdefs.h	2010-07-30 11:07:39.000000000 -0700
+@@ -50,9 +50,9 @@
+ #define LSA_RPC_DIR                              CACHEDIR "/rpc"
+ 
+ #define SAMR_RPC_CFG_DEFAULT_LPC_SOCKET_PATH     LSA_RPC_DIR "/lsass"
+-#define SAMR_RPC_CFG_DEFAULT_LOGIN_SHELL         "/bin/sh"
++#define SAMR_RPC_CFG_DEFAULT_LOGIN_SHELL         "/bin/bash"
+ #define SAMR_RPC_CFG_DEFAULT_HOMEDIR_PREFIX      "/home"
+-#define SAMR_RPC_CFG_DEFAULT_HOMEDIR_TEMPLATE    "%H/%U"
++#define SAMR_RPC_CFG_DEFAULT_HOMEDIR_TEMPLATE    "%H/likewise-open/%D/%U"
+ 
+ #define LSASS_KRB5_CACHE_PATH                    "FILE:" CACHEDIR "/krb5cc_lsass"
+ 
+diff -Nurb likewise-open-6.1.0.48254.orig/lsass/server/store/samdb/samdbdefs.h likewise-open-6.1.0.48254/lsass/server/store/samdb/samdbdefs.h
+--- likewise-open-6.1.0.48254.orig/lsass/server/store/samdb/samdbdefs.h	2010-07-29 17:27:58.000000000 -0700
++++ likewise-open-6.1.0.48254/lsass/server/store/samdb/samdbdefs.h	2010-07-30 11:06:52.000000000 -0700
+@@ -56,10 +56,10 @@
+ 
+ #define SAM_DB_CONTEXT_POOL_MAX_ENTRIES 10
+ 
+-#define SAM_DB_DEFAULT_ADMINISTRATOR_SHELL   "/bin/sh"
++#define SAM_DB_DEFAULT_ADMINISTRATOR_SHELL   "/bin/bash"
+ #define SAM_DB_DEFAULT_ADMINISTRATOR_HOMEDIR "/"
+ 
+-#define SAM_DB_DEFAULT_GUEST_SHELL           "/bin/sh"
++#define SAM_DB_DEFAULT_GUEST_SHELL           "/bin/bash"
+ #define SAM_DB_DEFAULT_GUEST_HOMEDIR         "/tmp"
+ 
+ #define SAMDB_LOG_ERROR(pszFormat, ...) LSA_LOG_ERROR(pszFormat, ## __VA_ARGS__)

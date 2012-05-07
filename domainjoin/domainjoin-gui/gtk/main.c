@@ -442,7 +442,7 @@ do_join(JoinDialog* dialog, LWException** exc)
 
         info.dialog = progress_dialog;
 
-        g_thread_create(join_worker, &info, FALSE, NULL);
+        g_thread_new(NULL, join_worker, &info);
 
         if (joinprogress_run(progress_dialog) == JOINPROGRESS_ERROR)
         {
@@ -541,7 +541,7 @@ status_mode(LWException** exc)
                 exit(1);
             }
 
-            g_thread_create(leave_worker, progress_dialog, FALSE, NULL);
+            g_thread_new(NULL, leave_worker, progress_dialog);
 
             if (joinprogress_run(progress_dialog) == JOINPROGRESS_ERROR)
             {
@@ -598,7 +598,7 @@ main(int argc, char** argv)
 
     log_begin();
 
-    g_thread_init(NULL);
+    g_type_init();
     gdk_threads_init();
     gdk_threads_enter();
 

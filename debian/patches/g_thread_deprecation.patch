@@ -1,0 +1,57 @@
+Description: Use current glib 2.31.x gthread API.
+Author: Martin Pitt <martin.pitt@ubuntu.com>
+Bug-Ubuntu: https://launchpad.net/bugs/911125
+
+Index: likewise-open-6.1.0.406/curl/docs/examples/curlgtk.c
+===================================================================
+--- likewise-open-6.1.0.406.orig/curl/docs/examples/curlgtk.c	2011-07-27 21:01:46.000000000 +0200
++++ likewise-open-6.1.0.406/curl/docs/examples/curlgtk.c	2012-01-03 13:28:07.005090352 +0100
+@@ -80,7 +80,7 @@
+   curl_global_init(CURL_GLOBAL_ALL);
+ 
+   /* Init thread */
+-  g_thread_init(NULL);
++  g_type_init();
+ 
+   gtk_init(&argc, &argv);
+   Window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
+@@ -96,7 +96,7 @@
+   gtk_container_add(GTK_CONTAINER(Frame2), Bar);
+   gtk_widget_show_all(Window);
+ 
+-  if (!g_thread_create(&my_thread, argv[1], FALSE, NULL) != 0)
++  if (!g_thread_new(NULL, &my_thread, argv[1]) != 0)
+     g_warning("can't create the thread");
+ 
+ 
+Index: likewise-open-6.1.0.406/domainjoin/domainjoin-gui/gtk/main.c
+===================================================================
+--- likewise-open-6.1.0.406.orig/domainjoin/domainjoin-gui/gtk/main.c	2011-07-27 21:00:53.000000000 +0200
++++ likewise-open-6.1.0.406/domainjoin/domainjoin-gui/gtk/main.c	2012-01-03 13:28:38.413091873 +0100
+@@ -442,7 +442,7 @@
+ 
+         info.dialog = progress_dialog;
+ 
+-        g_thread_create(join_worker, &info, FALSE, NULL);
++        g_thread_new(NULL, join_worker, &info);
+ 
+         if (joinprogress_run(progress_dialog) == JOINPROGRESS_ERROR)
+         {
+@@ -541,7 +541,7 @@
+                 exit(1);
+             }
+ 
+-            g_thread_create(leave_worker, progress_dialog, FALSE, NULL);
++            g_thread_new(NULL, leave_worker, progress_dialog);
+ 
+             if (joinprogress_run(progress_dialog) == JOINPROGRESS_ERROR)
+             {
+@@ -598,7 +598,7 @@
+ 
+     log_begin();
+ 
+-    g_thread_init(NULL);
++    g_type_init();
+     gdk_threads_init();
+     gdk_threads_enter();
+ 

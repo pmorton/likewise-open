@@ -69,9 +69,9 @@
 #endif /* WIN32 */
 #include <fcntl.h>
 #include <stdio.h>
-#include <sasl.h>
-#include <saslutil.h>
-#include <saslplug.h>
+#include <sasl/sasl.h>
+#include <sasl/saslutil.h>
+#include <sasl/saslplug.h>
 
 #include "plugin_common.h"
 
@@ -81,6 +81,7 @@
 
 #include <errno.h>
 
+#include <string.h>
 /*****************************  Common Section  *****************************/
 
 static const char plugin_id[] = "$Id: gssapi.c,v 1.92 2004/07/21 14:39:06 rjs3 Exp $";

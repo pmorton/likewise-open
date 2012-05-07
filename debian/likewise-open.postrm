@@ -1,0 +1,95 @@
+#!/bin/sh
+
+LOG=/var/log/likewise-open-install.log
+TLOG=/tmp/likewise-open-install.txt
+
+# Display to screen and log file with a blank line.
+log()
+{
+    echo $@
+    echo
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+_log()
+{
+    echo $@
+    echo $@ >> $LOG
+}
+
+# Display to file.
+logfile()
+{
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file.
+exec_log()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Warning: $@ returned $err"
+        _log `cat $TLOG`
+        _log
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# Log only to file.
+exec_logfile()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+    else
+        echo "Warning: $@ returned $err" >> $LOG
+    fi
+    cat $TLOG >> $LOG
+    echo >> $LOG
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file and then exit.
+exec_log_exit()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Error: $@ returned $err"
+        _log `cat $TLOG`
+        _log
+        rm -f $TLOG > /dev/null 2>&1
+        exit 1
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+case "$1" in
+    purge)
+        logfile "### likewise-open.postrm purge"
+        exec_log_exit "rm -rf /var/lib/likewise-open"
+        exit 0
+    ;;
+esac
+
+#DEBHELPER#

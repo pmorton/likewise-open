@@ -402,6 +402,9 @@ option()
                 ppc)
                     _default_MK_BUILD_ARCH="powerpc"
                     ;;
+                arm*)
+                    _default_MK_BUILD_ARCH="arm"
+                    ;;
                 *)
                     mk_fail "unknown architecture: `uname -m`"
                     ;;

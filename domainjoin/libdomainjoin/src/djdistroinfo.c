@@ -841,7 +841,6 @@ DJGetLikewiseVersion(
     PSTR line = NULL; 
     BOOLEAN isEndOfFile = FALSE;
     DWORD ceError = ERROR_SUCCESS;
-    BOOLEAN bIsEnterprise = FALSE;
 
     PSTR _product = NULL;
     PSTR _version = NULL;
@@ -855,15 +854,7 @@ DJGetLikewiseVersion(
 #ifdef MINIMAL_JOIN
     GCE(ceError = CTOpenFile(LOCALSTATEDIR "/VERSION", "r", &versionFile));
 #else
-    ceError = CTOpenFile(PREFIXDIR "/data/ENTERPRISE_VERSION", "r", &versionFile);
-    if (ceError == 0)
-    {
-        bIsEnterprise = TRUE;
-    }
-    else
-    {
-        GCE(ceError = CTOpenFile(PREFIXDIR "/data/VERSION", "r", &versionFile));
-    }
+    GCE(ceError = CTOpenFile(PREFIXDIR "/share/likewise-open/VERSION", "r", &versionFile));
 #endif
 
     while (TRUE)
@@ -889,14 +880,8 @@ DJGetLikewiseVersion(
         }
     }
 
-    if (bIsEnterprise)
-    {
-        GCE(ceError = CTStrdup("Enterprise", &_product));
-    }
-    else
-    {
-        GCE(ceError = CTStrdup("Open", &_product));
-    }
+    GCE(ceError = CTStrdup("Open", &_product));
+    
     if (_version == NULL)
     {
         GCE(ceError = CTStrdup("unknown", &_version));

@@ -1,0 +1,101 @@
+Source: likewise-open
+Section: net
+Priority: optional
+Maintainer: Chuck Short <zulcss@ubuntu.com>
+XSBC-Original-Maintainer: Gerald Carter <gcarter@likewise.com>
+Build-Depends: autoconf (>=2.61), automake (>= 1.9.6), bison, debhelper (>= 7),
+ libglade2-dev, libncurses5-dev, libpam0g-dev, libpam-runtime,
+ libssl-dev, libtool (>= 2.2.4), libsqlite3-dev, uuid-dev, quilt, rsync,
+ libxml2, libkrb5-dev, libldap2-dev, libtdb-dev, libcurl4-openssl-dev,
+ libpopt-dev, libsasl2-dev
+Standards-Version: 3.8.3
+Vcs-Browser: http://lobugs.likewiseopen.org/
+Homepage: http://www.likewiseopen.org/
+
+Package: likewise-open5
+Section: oldlibs
+Depends: ${misc:Depends}, likewise-open
+Architecture: all
+Description: transitional dummy package
+ This is a dummy package to facilitate clean upgrades. You can safely remove
+ this package after the upgrade.
+
+Package: likewise-open5-gui
+Section: oldlibs
+Depends: ${misc:Depends}, likewise-open, likewise-open-gui
+Architecture: all
+Description: transitional dummy package
+ This is a dummy package to facilitate clean upgrades. You can safely remove
+ this package after the upgrade.
+
+Package: likewise-open5-libs
+Section: oldlibs
+Depends: ${misc:Depends}, likewise-open
+Architecture: all
+Description: transitional dummy package
+ This is a dummy package to facilitate clean upgrades. You can safely remove
+ this package after the upgrade.
+
+Package: likewise-open5-lsass
+Section: oldlibs
+Depends: ${misc:Depends}, likewise-open, libpam-runtime, procps, psmisc
+Architecture: all
+Description: transitional dummy package
+ This is a dummy package to facilitate clean upgrades. You can safely remove
+ this package after the upgrade.
+
+Package: likewise-open5-eventlog
+Section: oldlibs
+Depends: ${misc:Depends}, likewise-open
+Architecture: all
+Description: transitional dummy package
+ This is a dummy package to facilitate clean upgrades. You can safely remove
+ this package after the upgrade.
+
+Package: likewise-open5-netlogon
+Section: oldlibs
+Depends: ${misc:Depends}, likewise-open
+Architecture: all
+Description: transitional dummy package
+ This is a dummy package to facilitate clean upgrades. You can safely remove
+ this package after the upgrade.
+
+Package: likewise-open5-rpc
+Section: oldlibs
+Depends: ${misc:Depends}, likewise-open
+Architecture: all
+Description: transitional dummy package
+ This is a dummy package to facilitate clean upgrades. You can safely remove
+ this package after the upgrade.
+
+Package: likewise-open
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}, libpam-runtime,
+ procps, psmisc
+Suggests: likewise-open-gui
+Provides: likewise-open5
+Conflicts: likewise-open,
+ likewise-open5 (<< 5.4.0.39115-3),
+ likewise-open5-libs (<< 5.4.0.39115-3),
+ likewise-open5-lsass (<< 5.4.0.39115-3),
+ likewise-open5-eventlog (<< 5.4.0.39115-3),
+ likewise-open5-netlogon (<< 5.4.0.39115-3),
+ likewise-open5-rpc (<< 5.4.0.39115-3),
+Replaces: likewise-open5 (<< 5.4.0.39115-3),
+ likewise-open5-libs (<< 5.4.0.39115-3),
+ likewise-open5-lsass (<< 5.4.0.39115-3),
+ likewise-open5-eventlog (<< 5.4.0.39115-3),
+ likewise-open5-netlogon (<< 5.4.0.39115-3),
+ likewise-open5-rpc (<< 5.4.0.39115-3),
+Description: Authentication services for Active Directory domains
+ Likewise Open integrates Unix desktops and servers into an Active Directory
+ environment by joining hosts to the domain and letting Unix applications and
+ services authenticate Windows users and groups via the PAM and Name Service
+ Switch libraries.
+
+Package: likewise-open-gui
+Architecture: any
+Depends: likewise-open, ${shlibs:Depends}, ${misc:Depends}
+Description: Desktop utility for joining Active Directory domains
+ Likewise Open graphical desktop utility for joining hosts to Active Directory
+ domains.

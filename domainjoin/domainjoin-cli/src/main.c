@@ -519,6 +519,7 @@ void DoJoin(int argc, char **argv, int columns, LWException **exc)
 
     LW_TRY(exc, DJRunJoinProcess(&options, &LW_EXC));
     fprintf(stdout, "SUCCESS\n");
+    fprintf(stdout, "You should reboot this system before attempting GUI logins as a domain user.\n");
 
 cleanup:
     DJFreeJoinProcessOptions(&options);

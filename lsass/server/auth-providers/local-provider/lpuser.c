@@ -1190,7 +1190,7 @@ LocalDirDeleteUser(
     PDIRECTORY_ENTRY pEntry = NULL;
     DWORD dwNumEntries = 0;
     PSID pUserSid = NULL;
-    PSID pDomainSid = NULL;
+    /*PSID pDomainSid = NULL;*/
     BOOLEAN bLocked = FALSE;
 
     PWSTR pwszAttributes[] = {
@@ -1240,7 +1240,7 @@ LocalDirDeleteUser(
 
     LOCAL_RDLOCK_RWLOCK(bLocked, &gLPGlobals.rwlock);
 
-    pDomainSid = gLPGlobals.pLocalDomainSID;
+    /*pDomainSid = gLPGlobals.pLocalDomainSID;*/
 
     /*if (LocalDirIsBuiltinAccount(
                     pDomainSid,

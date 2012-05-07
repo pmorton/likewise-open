@@ -160,6 +160,9 @@ configure()
             ia64_32)
                 target_cpu="$target_cpu ia64"
                 ;;
+            arm*)
+                target_cpu="$target_cpu arm"
+                ;;
         esac
     done
 

@@ -1,0 +1,160 @@
+#!/bin/sh
+
+DOMAINJOIN=/usr/bin/domainjoin-cli
+LWSMD=/etc/init.d/lwsmd
+
+DAEMONS_TO_HALT="likewise-winbindd lwsmd lwregd netlogond lwiod dcerpcd eventlogd lsassd"
+
+LOG=/var/log/likewise-open-install.log
+TLOG=/tmp/likewise-open-install.txt
+
+# Display to screen and log file with a blank line.
+log()
+{
+    echo $@
+    echo
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+_log()
+{
+    echo $@
+    echo $@ >> $LOG
+}
+
+# Display to file.
+logfile()
+{
+    echo $@ >> $LOG
+    echo >> $LOG
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file.
+exec_log()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Warning: $@ returned $err"
+        _log `cat $TLOG`
+        _log
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# Log only to file.
+exec_logfile()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+    else
+        echo "Warning: $@ returned $err" >> $LOG
+    fi
+    cat $TLOG >> $LOG
+    echo >> $LOG
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+# Execute command.
+# If successful, note in log file.
+# If not successful, note on screen and log file and then exit.
+exec_log_exit()
+{
+    $@ > $TLOG 2>&1
+    err=$?
+    if [ $err -eq 0 ]; then
+        echo "Success: $@" >> $LOG
+        cat $TLOG >> $LOG
+        echo >> $LOG
+    else
+        _log "Error: $@ returned $err"
+        _log `cat $TLOG`
+        _log
+        rm -f $TLOG > /dev/null 2>&1
+        exit 1
+    fi
+    rm -f $TLOG > /dev/null 2>&1
+    return $err
+}
+
+case "$1" in
+    remove)
+    logfile "### likewise-open.prerm remove"
+
+    exec_log_exit "pam-auth-update --package --remove likewise-open"
+
+    # Remove references elsewhere.
+    if [ -x $DOMAINJOIN ]
+    then
+        exec_log_exit "$DOMAINJOIN configure --disable nsswitch"
+        exec_log_exit "$DOMAINJOIN configure --disable ssh"
+        exec_log_exit "$DOMAINJOIN configure --long `hostname --long` --short `hostname --short` --disable krb5"
+    fi
+
+    #### AGGRESIVELY STOP LIKEWISE DAEMONS
+    logfile "Snapshot of processes before stopping daemons"
+    exec_logfile "ps ax"
+
+    # Stop all daemons; none should be needed anymore.
+    if [ -x $LWSMD ]
+    then
+        exec_log "$LWSMD stop"
+    fi
+
+    for daemon in $DAEMONS_TO_HALT
+    do
+        if [ -x /etc/init.d/$daemon ]; then
+            exec_logfile "/etc/init.d/$daemon stop"
+        fi
+        exec_logfile "pkill -TERM -x $daemon"
+        exec_logfile "pkill -KILL -x $daemon"
+        exec_logfile "rm -f /var/run/$daemon.pid"
+    done
+
+    logfile "Snapshot of processes after stopping daemons"
+    exec_logfile "ps ax"
+    exit 0
+    ;;
+
+    failed-upgrade)
+    logfile "### likewise-open.prerm failed-upgrade"
+    if [ -x $LWSMD ]
+    then
+        exec_log "$LWSMD start"
+    fi
+    exit 0
+    ;;
+
+    upgrade)
+    logfile "### likewise-open.prerm upgrade"
+    if [ -x $LWSMD ]
+    then
+        exec_log "$LWSMD stop"
+    fi
+
+    for daemon in $DAEMONS_TO_HALT
+    do
+        if [ -x /etc/init.d/$daemon ]; then
+            exec_logfile "/etc/init.d/$daemon stop"
+        fi
+        exec_logfile "pkill -TERM -x $daemon"
+        exec_logfile "pkill -KILL -x $daemon"
+        exec_logfile "rm -f /var/run/$daemon.pid"
+    done
+    exit 0
+    ;;
+esac
+
+#DEBHELPER#

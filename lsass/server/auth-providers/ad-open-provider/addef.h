@@ -48,11 +48,11 @@
 #ifndef __AD_DEF_H__
 #define __AD_DEF_H__
 
-#define AD_DEFAULT_SHELL            "/bin/sh"
+#define AD_DEFAULT_SHELL            "/bin/bash"
 
 #define AD_DEFAULT_UMASK            022
 
-#define AD_DEFAULT_HOMEDIR_TEMPLATE "%H/local/%D/%U"
+#define AD_DEFAULT_HOMEDIR_TEMPLATE "%H/likewise-open/%D/%U"
 
 #define AD_CACHE_ENTRY_EXPIRY_MINIMUM_SECS   (0)
 #define AD_CACHE_ENTRY_EXPIRY_DEFAULT_SECS   (4 * LSA_SECONDS_IN_HOUR)

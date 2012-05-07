@@ -1,0 +1,25 @@
+Author: Scott Salley <ssalley@beyondtrust.com>
+Description: Remove ability from domainjoin to modify PAM as package will handle that.
+Forwarded: not-needed
+Last-Update: 2011-07-15
+
+Index: likewise-open-5.4.0.41804/domainjoin/libdomainjoin/src/djmodule.c
+===================================================================
+--- likewise-open-5.4.0.41804.orig/domainjoin/libdomainjoin/src/djmodule.c	2010-03-05 15:45:28.000000000 -0600
++++ likewise-open-5.4.0.41804/domainjoin/libdomainjoin/src/djmodule.c	2010-03-05 15:46:13.000000000 -0600
+@@ -76,7 +76,6 @@
+     &DJBashPrompt,
+     &DJGdmPresession,
+     &DJPamMode,
+-    &DJPamModule,
+     &DJLamAuth,
+     &DJSshModule,
+     &DJDSPlugin,
+@@ -88,7 +87,6 @@
+     &DJDSPlugin,
+     &DJSshModule,
+     &DJLamAuth,
+-    &DJPamModule,
+     &DJPamMode,
+     &DJGdmPresession,
+     &DJBashPrompt,

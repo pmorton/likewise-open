@@ -1,0 +1,2202 @@
+Author: Scott Salley <ssalley@beyondtrust.com>
+Description: Modify the way init scripts are fixed up because 'make V=1' results
+in corrupted files.
+Forwarded: yes
+Last-Update: 2011-09-12
+
+diff -Nurb '--exclude=.bzr' likewise-open/git-build/config/init-base.sh likewise-open.new/git-build/config/init-base.sh
+--- likewise-open/git-build/config/init-base.sh	2011-09-09 11:04:54.000000000 -0700
++++ likewise-open.new/git-build/config/init-base.sh	1969-12-31 16:00:00.000000000 -0800
+@@ -1,679 +0,0 @@
+-#!/bin/sh
+-
+-# Generic cross-platform init script logic
+-# Copyright (c) Likewise Software, Inc.
+-# All rights reserved.
+-#
+-# Authors: Jerry Carter (gcarter@likewisesoftware.com)
+-#          Kyle Stemen (kstemen@likewisesoftware.com)
+-#          Brian Koropoff (bkoropoff@likewisesoftware.com)
+-
+-# Implict arguments to this script when sourced:
+-#
+-# PROG_DESC - English description of program/service
+-# PROG_BIN - path to the program binary
+-# PROG_ARGS - additional arguments to pass to program on startup
+-# PROG_ERR - file where error diagnostics are logged
+-# PIDFILE - file where pid is stored (or empty/unset if a pid file is not created)
+-# SCRIPTNAME - the name of the init script
+-
+-## Have to set the path for HP-UX boot process
+-PATH=/sbin:/usr/sbin:/bin:/usr/bin:$PATH
+-export PATH
+-
+-alias_replacement()
+-{
+-    # Simulates the alias builtin function. It does this by creating a function
+-    # with the name of what should be aliased. So if it was run like this:
+-    #   alias_replacement myecho='echo my'
+-    # Then the alias would be emulated like this:
+-    #   myecho()
+-    #   {
+-    #      echo my "$@"
+-    #   }
+-    if [ "$#" -ne 1 ]; then
+-        echo "alias takes 1 argument"
+-        return 1
+-    fi
+-    # This function is passed something like abc=xyz . The name variable gets
+-    # set to abc, and value gets set to xyz .
+-    name="`expr "$1" : '^\(.*\)='`"
+-    value="`expr "$1" : '.*=\(.*\)$'`"
+-    eval "$name() { $value \"\$@\"; }"
+-}
+-
+-alias aliastest=echo
+-type aliastest 1>/dev/null 2>/dev/null
+-alias_works=$?
+-
+-_test_alias() { false; }
+-alias _test_alias="true"
+-case a in a) _test_alias; alias_case_works=$?;; esac
+-eval '_test_alias >/dev/null 2>&1'
+-alias_eval_works=$?
+-
+-if [ $alias_works -ne 0 -o $alias_case_works -ne 0 ]
+-then
+-    ( alias() { true; } ) >/dev/null 2>&1
+-    can_overwrite_builtins=$?
+-    unset alias >/dev/null 2>&1
+-
+-    if [ $alias_eval_works -eq 0 -a $can_overwrite_builtins -ne 0 ]; then
+-        # This is HP-UX. The alias command only takes effect when the file
+-        # is read. Furthermore, HP-UX won't let us redefine shell
+-        # builtins as system functions. So we'll have to alias
+-        # whatever shell builtins we need to now, and reread the file. The
+-        # alias_replacement function can realias the shell builtins after
+-        # they are renamed.
+-        echo_rename()
+-        {
+-            echo "$@"
+-        }
+-        alias echo=echo_rename
+-        alias alias=alias_replacement
+-        # It would cause problems if these aliases are left around for
+-        # when this script is resourced.
+-        unalias _test_alias
+-        unalias aliastest
+-        # Resource this script
+-        . EXECDIR/init-base.sh
+-        exit $?
+-    fi
+-
+-    # This platform doesn't have a working alias (at all). It needs to be
+-    # replaced. This is primarily for Solaris and FreeBSD.
+-    alias()
+-    {
+-        alias_replacement "$@"
+-    }
+-fi
+-
+-
+-##
+-## Determine what platform we are on
+-##
+-PLATFORM=""
+-if [ -f /etc/init.d/functions ]; then
+-    . /etc/init.d/functions
+-    PLATFORM="REDHAT"
+-elif [ -f /etc/rc.status ]; then
+-    . /etc/rc.status
+-    PLATFORM="SUSE"
+-elif [ -f /etc/debian_version ]; then
+-    . /lib/lsb/init-functions
+-    PLATFORM="DEBIAN"
+-elif [ "`uname -s`" = 'AIX' ]; then
+-    PLATFORM="AIX"
+-elif [ "`uname -s`" = 'HP-UX' ]; then
+-    PLATFORM="HP-UX"
+-elif [ "`uname -s`" = 'SunOS' ]; then
+-    PLATFORM="SOLARIS"
+-elif [ "`uname -s`" = 'VMkernel' ]; then                                  
+-    PLATFORM="ESXI"                             
+-elif [ "`uname`" = "FreeBSD" -o "`uname`" = "Isilon OneFS" ]; then
+-    PLATFORM="FREEBSD"
+-    extra_commands="reload"
+-    reload_cmd=daemon_reload
+-    status_cmd=daemon_status
+-    start_cmd=daemon_start
+-    stop_cmd=daemon_stop
+-else
+-    PLATFORM="UNKNOWN"
+-fi
+-
+-if [ -f /etc/rc.subr ]; then
+-    . /etc/rc.subr
+-fi
+-
+-if [ $PLATFORM = "HP-UX" -o $PLATFORM = "SOLARIS" -o $PLATFORM = "FREEBSD" ]; then
+-    LOCKFILE="/var/run/${SCRIPTNAME}.lock"
+-else
+-    LOCKFILE="/var/lock/subsys/${SCRIPTNAME}"
+-fi
+-
+-type printf 1>/dev/null 2>/dev/null
+-if [ $? -ne 0 ]; then
+-    # Usually printf is a shell built in, but on HPUX it is a program located
+-    # at /bin/printf. During system startup and shutdown the path is only
+-    # /sbin, so we need to manually find printf
+-    if [ -x /bin/printf ]; then
+-        alias printf=/bin/printf
+-    else
+-        echo "WARNING: unable to find printf program"
+-    fi
+-fi
+-
+-# echo_replacement emulates echo for all platforms using printf. printf is a
+-# shell builtin that exists on all platforms.
+-echo_replacement()
+-{
+-    if [ "$1" = "-n" ]; then
+-        shift;
+-        printf %s "$*"
+-    else
+-        printf %s\\n "$*"
+-    fi
+-}
+-
+-# 'echo -n' works with bash, but not with sh on Solaris, HPUX, and AIX.
+-if [ "`echo -n`" = "-n" ]; then
+-    alias echo=echo_replacement
+-fi
+-
+-seq_replacement()
+-{
+-    FIRST=1
+-    INCREMENT=1
+-    case "$#" in
+-        0)
+-            echo too few arguments
+-            return 1
+-            ;;
+-        1)
+-            LAST="$1"
+-            ;;
+-        2)
+-            FIRST="$1"
+-            LAST="$2"
+-            ;;
+-        3)
+-            FIRST="$1"
+-            INCREMENT="$2"
+-            LAST="$3"
+-            ;;
+-        *)
+-            echo too many arguments
+-            return 1
+-            ;;
+-    esac
+-    i="$FIRST"
+-    while [ "$i" -le "$LAST" ]; do
+-        echo "$i"
+-        i="`expr "$i" + "$INCREMENT"`"
+-    done
+-    return 0;
+-}
+-
+-# seq doesn't exist on HPUX or FreeBSD
+-type seq 2>/dev/null 1>/dev/null
+-if [ $? -ne 0 ]; then
+-    alias seq=seq_replacement
+-fi
+-
+-##
+-## small wrapper functions around distro specific calls
+-##
+-
+-status_success() {
+-    case "${PLATFORM}" in 
+-        REDHAT)
+-            echo_success
+-            echo
+-            ;;
+-        SUSE)
+-            rc_reset
+-            rc_status -v
+-            ;;
+-        DEBIAN)
+-            ;;
+-        AIX | HP-UX | SOLARIS | FREEBSD | ESXI | UNKNOWN)
+-            echo "...ok"
+-            ;;
+-    esac
+-}
+-
+-status_failed() {
+-    status=$1
+-    case "${PLATFORM}" in 
+-        REDHAT)
+-            echo_failure
+-            echo
+-            ;;
+-        SUSE)
+-            rc_failed $status
+-            rc_status -v
+-            ;;
+-        DEBIAN)
+-            ;;
+-        AIX | HP-UX | SOLARIS | ESXI | UNKNOWN)
+-            echo "...failed"
+-            ;;
+-    esac
+-}
+-
+-print_status () {
+-    status=$1
+-
+-    if [ $status = 0 ]; then
+-        status_success
+-    else
+-        status_failed $status
+-    fi
+-}
+-
+-generic_status()
+-{
+-    #Uses return codes specified in
+-    # http://refspecs.freestandards.org/LSB_3.1.0/LSB-Core-generic/LSB-Core-generic/iniscrptact.html
+-    pids="`generic_pid`"
+-    #Take the list of pids and get just the last one
+-    pid=""
+-    for i in $pids; do
+-        pid="$i"
+-    done
+-
+-    if [ -n "$pid" ]
+-    then
+-        #Is the pid valid?
+-        #Does the program with that pid match our program name?
+-        #HP-UX needs UNIX95 set to support the -o option
+-        if [ "${PLATFORM}" = "ESXI" ]; then
+-            if kill -0 $pid > /dev/null 2>&1 ; then
+-                # pid is valid. have to assume it's the right program
+-                return 0
+-            else
+-                return 1
+-            fi
+-        fi
+-	pid_comm="`UNIX95=1 ps -p "$pid" -o args= 2>/dev/null | awk '{print $1}'`"
+-	if [ "$pid_comm" = "<defunct>" ]; then
+-            #It is a zombie process
+-            return 4
+-	fi
+-	if [ "$pid_comm" = "${PROG_BIN}" ]; then
+-            #If the system keeps cmdline files, check it
+-            if [ -f /proc/${pid}/cmdline ]; then
+-                #We can't check the exe file because we may be looking
+-                #at a version of the program that has been overwritten
+-		grep -q ${PROG_BIN} /proc/${pid}/cmdline && return 0
+-            else
+-		return 0
+-            fi
+-	fi
+-	
+-        #Program is dead, but lock file exists
+-	[ -f "${LOCKFILE}" ] && return 2
+-	
+-        #Program is dead, but pid file exists
+-	return 1
+-    else
+-	return 3
+-    fi
+-}
+-
+-generic_pid()
+-{
+-    if [ -n "${PIDFILE}" -a -f "${PIDFILE}" ]
+-    then
+-	cat "${PIDFILE}"
+-    else
+-	case "${PLATFORM}" in
+-	    FREEBSD)
+-		pgrep -f "^${PROG_BIN}"
+-		;;
+-	    ESXI)
+-		( ps | grep "^[0-9]* [0-9]* `basename ${PROG_BIN}` *${PROG_BIN}" | awk '{ print $1 };' | head -1 )
+-		;;
+-	    HP-UX)
+-		( UNIX95= ps -e -o pid= -o args= | grep "^ *[0123456789]* *${PROG_BIN}" | awk '{ print $1 };' )
+-		;;
+-	    *)
+-		( UNIX95=1; ps -e -o pid= -o args= | grep "^ *[0123456789]* *${PROG_BIN}" | awk '{ print $1 };' )
+-		;;
+-	esac
+-    fi
+-}
+-
+-check_load_path()
+-{
+-    libdir=/opt/likewise/lib
+-    if [ -x /opt/likewise/lib64 ]; then
+-        libdir=/opt/likewise/lib64
+-    fi
+-    for name in LD_LIBRARY_PATH LIBPATH SHLIB_PATH; do
+-        eval value=\$$name
+-        if [ -n "$value" ]; then
+-            expr "$value" : "^$libdir:" >/dev/null
+-            if [ $? -ne 0 ]; then
+-                if type logger >/dev/null 2>&1; then
+-                    logger -p daemon.error "LD_LIBRARY_PATH, LIBPATH, and SHLIB_PATH must be unset or list $libdir as the first directory. Likewise daemons will automatically unset the variable, but this variable still must be changed for the rest of your system. See the \"Requirements for the Agent\" section of the Likewise manual for more information."
+-                fi
+-                unset $name
+-                export $name
+-            fi
+-        fi
+-    done
+-    if [ -n "$LD_PRELOAD" ]; then
+-        if type logger >/dev/null 2>&1; then
+-            logger -p daemon.error "LD_PRELOAD must be unset. Likewise daemons will automatically unset the variable, but this variable still must be changed for the rest of your system. See the \"Requirements for the Agent\" section of the Likewise manual for more information."
+-        fi
+-        unset LD_PRELOAD
+-        export LD_PRELOAD
+-    fi
+-}
+-
+-daemon_start() {
+-
+-    if [ -f "${PROG_ERR}" ]; then
+-	/bin/rm -f $PROG_ERR;
+-    fi
+-
+-    if [ -n "${STARTHOOK}" ]; then
+-	${STARTHOOK}
+-    fi
+-
+-    check_load_path
+-
+-    case "${PLATFORM}" in 
+-        REDHAT)
+-            echo -n $"Starting `basename ${PROG_BIN}`: "
+-            daemon ${PROG_BIN} ${PROG_ARGS}
+-            status=$?
+-            ;;
+-        SUSE)
+-            echo -n "Starting $PROG_DESC"
+-            startproc ${PROG_BIN} ${PROG_ARGS}
+-            status=$?
+-            ;;
+-        DEBIAN)
+-            log_daemon_msg "Starting $PROG_DESC: `basename $PROG_BIN`"
+-            start-stop-daemon --start --exec ${PROG_BIN} -- ${PROG_ARGS}
+-            status=$?
+-            log_end_msg $status
+-            ;;
+-        AIX)
+-            echo -n "Starting $PROG_DESC"
+-            if (lssrc -s dhcpcd | grep active >/dev/null); then
+-                # Wait up to 30 seconds for an ip address
+-                for i in `seq 30`; do
+-                    ifconfig -a | grep inet | grep -v 127.0.0 | grep -v 0.0.0.0 | grep -v ::1/0 >/dev/null && break
+-                    sleep 1
+-                done
+-            fi
+-            ${PROG_BIN} ${PROG_ARGS}
+-            status=$?
+-            if [ $status -eq 0 ]; then
+-                status=1
+-                for i in `seq 5`; do
+-                    #Did the program start?
+-                    generic_status
+-                    status=$?
+-                    [ $status -eq 0 ] && break
+-                    sleep 1
+-                done
+-            fi
+-            ;;
+-        HP-UX | SOLARIS | FREEBSD | ESXI)
+-            echo -n "Starting $PROG_DESC"
+-            if type svcadm >/dev/null 2>&1 ; then
+-                # Use the solaris service manager
+-
+-                # This will start the program again if it was in maintenance
+-                # mode.
+-                svcadm clear "$SCRIPTNAME" 2>/dev/null
+-                # This will start the program again if it was disabled.
+-                svcadm enable "$SCRIPTNAME"
+-                status=$?
+-            else
+-                ${PROG_BIN} ${PROG_ARGS}
+-                status=$?
+-            fi
+-            if [ $status -eq 0 ]; then
+-                status=1
+-                for i in `seq 5`; do
+-                    #Did the program start?
+-                    generic_status
+-                    status=$?
+-                    [ $status -eq 0 ] && break
+-                    sleep 1
+-                done
+-            fi
+-            ;;
+-        UNKNOWN)
+-            ${PROG_BIN} ${PROG_ARGS}
+-            status=$?
+-            ;;
+-    esac
+-
+-    if [ -n "${POSTSTARTHOOK}" ]; then
+-	${POSTSTARTHOOK}
+-    fi
+-
+-    [ $status = 0 ] && [ ${PLATFORM} != "DEBIAN" ] && touch ${LOCKFILE}
+-    return $status
+-}
+-
+-daemon_stop() {
+-    case "${PLATFORM}" in 
+-        REDHAT)
+-            echo -n $"Stopping `basename ${PROG_BIN}`: "
+-            killproc `basename ${PROG_BIN}`
+-            status=$?
+-            ;;
+-        SUSE)
+-            echo -n "Stopping $PROG_DESC "
+-            killproc -TERM ${PROG_BIN}
+-            status=$?
+-            ;;
+-        DEBIAN)
+-            log_daemon_msg "Stopping $PROG_DESC: `basename $PROG_BIN`"
+-            status=1
+-            #only try to stop the daemon if it is running
+-            if generic_status; then
+-                kill -TERM "`generic_pid`"
+-		# Forget our pidfile since it will now be invalid
+-		# if is still present.  This means generic_status
+-		# will fall back on ps to see if the daemon is still
+-		# running.  This is important on LinuxThreads-based
+-		# systems where other threads can still be in the process
+-		# of shutting down even when the main thread has exited
+-		PIDFILE=""
+-                #Wait up to 5 seconds for the program to end
+-                for i in `seq 5`; do
+-                    #Did the program end?
+-                    generic_status
+-                    # Make sure the agent is not running and is not a zombie
+-                    # process.
+-                    [ $? -ne 0 -a $? -ne 4 ] && status=0 && break
+-                    # use the following line instead after bug 3634 is fixed
+-                    #[ $? -eq 3 -o $? -eq 2 ] && status=0 && break
+-                    sleep 1
+-                done
+-            fi
+-            log_end_msg $status
+-            ;;
+-        AIX | HP-UX | SOLARIS | FREEBSD | ESXI)
+-            echo -n "Stopping $PROG_DESC"
+-            status=1
+-            #only try to stop the daemon if it is running
+-            if generic_status; then
+-                pid="`generic_pid`"
+-                kill -TERM $pid
+-
+-                #Wait up to 5 seconds for the program to end
+-                for i in `seq 5`; do
+-                    #Did the program end?
+-                    generic_status
+-                    # Make sure the agent is not running and is not a zombie
+-                    # process.
+-                    [ $? -ne 0 -a $? -ne 4 ] && status=0 && break
+-                    # use the following line instead after bug 3634 is fixed
+-                    #[ $? -eq 3 -o $? -eq 2 ] && status=0 && break
+-                    sleep 1
+-                done
+-            fi
+-            ;;
+-        UNKNOWN)
+-            killall -TERM `basename ${PROG_BIN}`
+-            status=$?
+-            ;;
+-    esac
+-
+-    [ $status = 0 ] && /bin/rm -f ${LOCKFILE}
+-    return $status
+-}
+-
+-daemon_reload()
+-{
+-    case "${PLATFORM}" in 
+-        REDHAT | SUSE | FREEBSD | ESXI)
+-            echo -n $"Reloading ${PROG_DESC} configuration"
+-	    killall -HUP "`basename ${PROG_BIN}`"
+-            status=$?
+-            ;;
+-        DEBIAN)
+-            log_daemon_msg "Reloading $PROG_DESC configuration"
+-	    killall -HUP "`basename ${PROG_BIN}`"
+-	    status=$?
+-            log_end_msg $status
+-            ;;
+-        AIX | HP-UX | SOLARIS | UNKNOWN)
+-            echo -n "Stopping $PROG_DESC"
+-	    generic_killall -HUP
+-	    status=$?
+-            ;;
+-    esac
+-
+-    return $status
+-}
+-
+-daemon_status() {
+-    case "${PLATFORM}" in
+-        REDHAT)
+-            status ${PROG_BIN}
+-            ;;
+-        SUSE)
+-            checkproc ${PROG_BIN}
+-            rc_status -v
+-            ;;
+-        AIX | HP-UX | SOLARIS | DEBIAN | FREEBSD | ESXI)
+-            generic_status
+-            status=$?
+-            case "$status" in
+-                0)
+-                    echo "running";
+-                    ;;
+-                1)
+-                    echo "stopped";
+-                    #Use the bellow line instead after bug 3634 is fixed
+-                    #echo "died leaving pid file";
+-                    ;;
+-                2)
+-                    echo "died leaving lock file";
+-                    ;;
+-                3)
+-                    echo "stopped";
+-                    ;;
+-            esac
+-            return $status
+-        ;;
+-        UNKNOWN)
+-            echo "Not implemented."
+-            ;;
+-    esac
+-}
+-
+-#Sends the signal specified by the first parameter to all instances
+-#of $PROG_BIN
+-generic_killall()
+-{
+-    #This gets the list of all current running instances of PROG_BIN,
+-    #but it can't tell which directory the program was run from. If
+-    #cmdline is available in the proc pseudo-filesystem, we'll verify
+-    #the pids.
+-    unverified_pids=`generic_pid`
+-    pids=
+-    for pid in $unverified_pids; do
+-        #If the system keeps cmdline files, check them
+-        if [ -f /proc/${pid}/cmdline ]; then
+-            #We can't check the exe file because we may be looking
+-            #at a version of the program that has been overwritten
+-            grep -q ${AUTHD_BIN} /proc/${pid}/cmdline && pids="$pids $pid"
+-        else
+-            pids="$pids $pid"
+-        fi
+-    done
+-
+-    for pid in $pids; do
+-        [ ! -z "`UNIX95=1 ps -p $pid -o pid=`" ] && kill "$1" $pid
+-    done
+-
+-    #The manpage of killall says it returns 0 if at least one process is
+-    #killed. I can't get it to return anything other than 0. Even if no
+-    #processes die with SIGTERM. We'll just return 0 here too
+-    return 0
+-}
+-
+-####################################################################
+-## Main init script code
+-##
+-
+-if type run_rc_command >/dev/null 2>&1; then
+-    # Looks like this is a FreeBSD based system. We should use their arg
+-    # parsing instead of our own.
+-    name="$SCRIPTNAME"
+-    rcvar="`set_rcvar`"
+-    command="$PROG_BIN"
+-    command_args="$PROG_ARGS"
+-    pidfile="$PIDFILE"
+-    eval "${name}_enable=YES"
+-
+-    load_rc_config "$name"
+-    [ "$1" = "start" -a -n "${STARTHOOK}" ] && ${STARTHOOK}
+-    check_load_path
+-    run_rc_command "$1" || exit $?
+-    [ "$1" = "start" -a -n "${POSTSTARTHOOK}" ] && ${POSTSTARTHOOK}
+-    exit 0
+-fi
+-
+-case "$1" in 
+-    start)
+-        daemon_start
+-        ret=$?
+-        print_status $ret
+-        ;;
+-
+-    stop)
+-        daemon_stop
+-        ret=$?
+-        print_status $ret
+-        ;;
+-
+-    # HP-UX calls this
+-    stop_msg)
+-        echo "Stopping $PROG_DESC"
+-        exit 0
+-        ;;
+-
+-    # HP-UX calls this
+-    start_msg)
+-        echo "Starting $PROG_DESC"
+-        exit 0
+-        ;;
+-
+-    restart)
+-        daemon_stop
+-        ret=$?
+-        print_status $ret
+-        daemon_start
+-        ret=$?
+-        print_status $ret
+-        ;;
+-        
+-    status)
+-        daemon_status
+-        ;;
+-
+-    reload)
+-	# Ignore SIGHUP since killall could send it to us as well
+-	trap '' HUP
+-	daemon_reload
+-	ret=$?
+-	print_status $ret
+-        ;;
+-    *)
+-        echo "Usage: $0 {start|stop|restart|status|reload}"
+-        exit 1
+-        ;;
+-esac
+-
+diff -Nurb '--exclude=.bzr' likewise-open/git-build/config/init-base.sh.in likewise-open.new/git-build/config/init-base.sh.in
+--- likewise-open/git-build/config/init-base.sh.in	1969-12-31 16:00:00.000000000 -0800
++++ likewise-open.new/git-build/config/init-base.sh.in	2011-09-09 14:27:31.000000000 -0700
+@@ -0,0 +1,679 @@
++#!/bin/sh
++
++# Generic cross-platform init script logic
++# Copyright (c) Likewise Software, Inc.
++# All rights reserved.
++#
++# Authors: Jerry Carter (gcarter@likewisesoftware.com)
++#          Kyle Stemen (kstemen@likewisesoftware.com)
++#          Brian Koropoff (bkoropoff@likewisesoftware.com)
++
++# Implict arguments to this script when sourced:
++#
++# PROG_DESC - English description of program/service
++# PROG_BIN - path to the program binary
++# PROG_ARGS - additional arguments to pass to program on startup
++# PROG_ERR - file where error diagnostics are logged
++# PIDFILE - file where pid is stored (or empty/unset if a pid file is not created)
++# SCRIPTNAME - the name of the init script
++
++## Have to set the path for HP-UX boot process
++PATH=/sbin:/usr/sbin:/bin:/usr/bin:$PATH
++export PATH
++
++alias_replacement()
++{
++    # Simulates the alias builtin function. It does this by creating a function
++    # with the name of what should be aliased. So if it was run like this:
++    #   alias_replacement myecho='echo my'
++    # Then the alias would be emulated like this:
++    #   myecho()
++    #   {
++    #      echo my "$@"
++    #   }
++    if [ "$#" -ne 1 ]; then
++        echo "alias takes 1 argument"
++        return 1
++    fi
++    # This function is passed something like abc=xyz . The name variable gets
++    # set to abc, and value gets set to xyz .
++    name="`expr "$1" : '^\(.*\)='`"
++    value="`expr "$1" : '.*=\(.*\)$'`"
++    eval "$name() { $value \"\$@\"; }"
++}
++
++alias aliastest=echo
++type aliastest 1>/dev/null 2>/dev/null
++alias_works=$?
++
++_test_alias() { false; }
++alias _test_alias="true"
++case a in a) _test_alias; alias_case_works=$?;; esac
++eval '_test_alias >/dev/null 2>&1'
++alias_eval_works=$?
++
++if [ $alias_works -ne 0 -o $alias_case_works -ne 0 ]
++then
++    ( alias() { true; } ) >/dev/null 2>&1
++    can_overwrite_builtins=$?
++    unset alias >/dev/null 2>&1
++
++    if [ $alias_eval_works -eq 0 -a $can_overwrite_builtins -ne 0 ]; then
++        # This is HP-UX. The alias command only takes effect when the file
++        # is read. Furthermore, HP-UX won't let us redefine shell
++        # builtins as system functions. So we'll have to alias
++        # whatever shell builtins we need to now, and reread the file. The
++        # alias_replacement function can realias the shell builtins after
++        # they are renamed.
++        echo_rename()
++        {
++            echo "$@"
++        }
++        alias echo=echo_rename
++        alias alias=alias_replacement
++        # It would cause problems if these aliases are left around for
++        # when this script is resourced.
++        unalias _test_alias
++        unalias aliastest
++        # Resource this script
++        . @MK_LIBEXECDIR@/init-base.sh
++        exit $?
++    fi
++
++    # This platform doesn't have a working alias (at all). It needs to be
++    # replaced. This is primarily for Solaris and FreeBSD.
++    alias()
++    {
++        alias_replacement "$@"
++    }
++fi
++
++
++##
++## Determine what platform we are on
++##
++PLATFORM=""
++if [ -f /etc/init.d/functions ]; then
++    . /etc/init.d/functions
++    PLATFORM="REDHAT"
++elif [ -f /etc/rc.status ]; then
++    . /etc/rc.status
++    PLATFORM="SUSE"
++elif [ -f /etc/debian_version ]; then
++    . /lib/lsb/init-functions
++    PLATFORM="DEBIAN"
++elif [ "`uname -s`" = 'AIX' ]; then
++    PLATFORM="AIX"
++elif [ "`uname -s`" = 'HP-UX' ]; then
++    PLATFORM="HP-UX"
++elif [ "`uname -s`" = 'SunOS' ]; then
++    PLATFORM="SOLARIS"
++elif [ "`uname -s`" = 'VMkernel' ]; then                                  
++    PLATFORM="ESXI"                             
++elif [ "`uname`" = "FreeBSD" -o "`uname`" = "Isilon OneFS" ]; then
++    PLATFORM="FREEBSD"
++    extra_commands="reload"
++    reload_cmd=daemon_reload
++    status_cmd=daemon_status
++    start_cmd=daemon_start
++    stop_cmd=daemon_stop
++else
++    PLATFORM="UNKNOWN"
++fi
++
++if [ -f /etc/rc.subr ]; then
++    . /etc/rc.subr
++fi
++
++if [ $PLATFORM = "HP-UX" -o $PLATFORM = "SOLARIS" -o $PLATFORM = "FREEBSD" ]; then
++    LOCKFILE="/var/run/${SCRIPTNAME}.lock"
++else
++    LOCKFILE="/var/lock/subsys/${SCRIPTNAME}"
++fi
++
++type printf 1>/dev/null 2>/dev/null
++if [ $? -ne 0 ]; then
++    # Usually printf is a shell built in, but on HPUX it is a program located
++    # at /bin/printf. During system startup and shutdown the path is only
++    # /sbin, so we need to manually find printf
++    if [ -x /bin/printf ]; then
++        alias printf=/bin/printf
++    else
++        echo "WARNING: unable to find printf program"
++    fi
++fi
++
++# echo_replacement emulates echo for all platforms using printf. printf is a
++# shell builtin that exists on all platforms.
++echo_replacement()
++{
++    if [ "$1" = "-n" ]; then
++        shift;
++        printf %s "$*"
++    else
++        printf %s\\n "$*"
++    fi
++}
++
++# 'echo -n' works with bash, but not with sh on Solaris, HPUX, and AIX.
++if [ "`echo -n`" = "-n" ]; then
++    alias echo=echo_replacement
++fi
++
++seq_replacement()
++{
++    FIRST=1
++    INCREMENT=1
++    case "$#" in
++        0)
++            echo too few arguments
++            return 1
++            ;;
++        1)
++            LAST="$1"
++            ;;
++        2)
++            FIRST="$1"
++            LAST="$2"
++            ;;
++        3)
++            FIRST="$1"
++            INCREMENT="$2"
++            LAST="$3"
++            ;;
++        *)
++            echo too many arguments
++            return 1
++            ;;
++    esac
++    i="$FIRST"
++    while [ "$i" -le "$LAST" ]; do
++        echo "$i"
++        i="`expr "$i" + "$INCREMENT"`"
++    done
++    return 0;
++}
++
++# seq doesn't exist on HPUX or FreeBSD
++type seq 2>/dev/null 1>/dev/null
++if [ $? -ne 0 ]; then
++    alias seq=seq_replacement
++fi
++
++##
++## small wrapper functions around distro specific calls
++##
++
++status_success() {
++    case "${PLATFORM}" in 
++        REDHAT)
++            echo_success
++            echo
++            ;;
++        SUSE)
++            rc_reset
++            rc_status -v
++            ;;
++        DEBIAN)
++            ;;
++        AIX | HP-UX | SOLARIS | FREEBSD | ESXI | UNKNOWN)
++            echo "...ok"
++            ;;
++    esac
++}
++
++status_failed() {
++    status=$1
++    case "${PLATFORM}" in 
++        REDHAT)
++            echo_failure
++            echo
++            ;;
++        SUSE)
++            rc_failed $status
++            rc_status -v
++            ;;
++        DEBIAN)
++            ;;
++        AIX | HP-UX | SOLARIS | ESXI | UNKNOWN)
++            echo "...failed"
++            ;;
++    esac
++}
++
++print_status () {
++    status=$1
++
++    if [ $status = 0 ]; then
++        status_success
++    else
++        status_failed $status
++    fi
++}
++
++generic_status()
++{
++    #Uses return codes specified in
++    # http://refspecs.freestandards.org/LSB_3.1.0/LSB-Core-generic/LSB-Core-generic/iniscrptact.html
++    pids="`generic_pid`"
++    #Take the list of pids and get just the last one
++    pid=""
++    for i in $pids; do
++        pid="$i"
++    done
++
++    if [ -n "$pid" ]
++    then
++        #Is the pid valid?
++        #Does the program with that pid match our program name?
++        #HP-UX needs UNIX95 set to support the -o option
++        if [ "${PLATFORM}" = "ESXI" ]; then
++            if kill -0 $pid > /dev/null 2>&1 ; then
++                # pid is valid. have to assume it's the right program
++                return 0
++            else
++                return 1
++            fi
++        fi
++	pid_comm="`UNIX95=1 ps -p "$pid" -o args= 2>/dev/null | awk '{print $1}'`"
++	if [ "$pid_comm" = "<defunct>" ]; then
++            #It is a zombie process
++            return 4
++	fi
++	if [ "$pid_comm" = "${PROG_BIN}" ]; then
++            #If the system keeps cmdline files, check it
++            if [ -f /proc/${pid}/cmdline ]; then
++                #We can't check the exe file because we may be looking
++                #at a version of the program that has been overwritten
++		grep -q ${PROG_BIN} /proc/${pid}/cmdline && return 0
++            else
++		return 0
++            fi
++	fi
++	
++        #Program is dead, but lock file exists
++	[ -f "${LOCKFILE}" ] && return 2
++	
++        #Program is dead, but pid file exists
++	return 1
++    else
++	return 3
++    fi
++}
++
++generic_pid()
++{
++    if [ -n "${PIDFILE}" -a -f "${PIDFILE}" ]
++    then
++	cat "${PIDFILE}"
++    else
++	case "${PLATFORM}" in
++	    FREEBSD)
++		pgrep -f "^${PROG_BIN}"
++		;;
++	    ESXI)
++		( ps | grep "^[0-9]* [0-9]* `basename ${PROG_BIN}` *${PROG_BIN}" | awk '{ print $1 };' | head -1 )
++		;;
++	    HP-UX)
++		( UNIX95= ps -e -o pid= -o args= | grep "^ *[0123456789]* *${PROG_BIN}" | awk '{ print $1 };' )
++		;;
++	    *)
++		( UNIX95=1; ps -e -o pid= -o args= | grep "^ *[0123456789]* *${PROG_BIN}" | awk '{ print $1 };' )
++		;;
++	esac
++    fi
++}
++
++check_load_path()
++{
++    libdir=/opt/likewise/lib
++    if [ -x /opt/likewise/lib64 ]; then
++        libdir=/opt/likewise/lib64
++    fi
++    for name in LD_LIBRARY_PATH LIBPATH SHLIB_PATH; do
++        eval value=\$$name
++        if [ -n "$value" ]; then
++            expr "$value" : "^$libdir:" >/dev/null
++            if [ $? -ne 0 ]; then
++                if type logger >/dev/null 2>&1; then
++                    logger -p daemon.error "LD_LIBRARY_PATH, LIBPATH, and SHLIB_PATH must be unset or list $libdir as the first directory. Likewise daemons will automatically unset the variable, but this variable still must be changed for the rest of your system. See the \"Requirements for the Agent\" section of the Likewise manual for more information."
++                fi
++                unset $name
++                export $name
++            fi
++        fi
++    done
++    if [ -n "$LD_PRELOAD" ]; then
++        if type logger >/dev/null 2>&1; then
++            logger -p daemon.error "LD_PRELOAD must be unset. Likewise daemons will automatically unset the variable, but this variable still must be changed for the rest of your system. See the \"Requirements for the Agent\" section of the Likewise manual for more information."
++        fi
++        unset LD_PRELOAD
++        export LD_PRELOAD
++    fi
++}
++
++daemon_start() {
++
++    if [ -f "${PROG_ERR}" ]; then
++	/bin/rm -f $PROG_ERR;
++    fi
++
++    if [ -n "${STARTHOOK}" ]; then
++	${STARTHOOK}
++    fi
++
++    check_load_path
++
++    case "${PLATFORM}" in 
++        REDHAT)
++            echo -n $"Starting `basename ${PROG_BIN}`: "
++            daemon ${PROG_BIN} ${PROG_ARGS}
++            status=$?
++            ;;
++        SUSE)
++            echo -n "Starting $PROG_DESC"
++            startproc ${PROG_BIN} ${PROG_ARGS}
++            status=$?
++            ;;
++        DEBIAN)
++            log_daemon_msg "Starting $PROG_DESC: `basename $PROG_BIN`"
++            start-stop-daemon --start --exec ${PROG_BIN} -- ${PROG_ARGS}
++            status=$?
++            log_end_msg $status
++            ;;
++        AIX)
++            echo -n "Starting $PROG_DESC"
++            if (lssrc -s dhcpcd | grep active >/dev/null); then
++                # Wait up to 30 seconds for an ip address
++                for i in `seq 30`; do
++                    ifconfig -a | grep inet | grep -v 127.0.0 | grep -v 0.0.0.0 | grep -v ::1/0 >/dev/null && break
++                    sleep 1
++                done
++            fi
++            ${PROG_BIN} ${PROG_ARGS}
++            status=$?
++            if [ $status -eq 0 ]; then
++                status=1
++                for i in `seq 5`; do
++                    #Did the program start?
++                    generic_status
++                    status=$?
++                    [ $status -eq 0 ] && break
++                    sleep 1
++                done
++            fi
++            ;;
++        HP-UX | SOLARIS | FREEBSD | ESXI)
++            echo -n "Starting $PROG_DESC"
++            if type svcadm >/dev/null 2>&1 ; then
++                # Use the solaris service manager
++
++                # This will start the program again if it was in maintenance
++                # mode.
++                svcadm clear "$SCRIPTNAME" 2>/dev/null
++                # This will start the program again if it was disabled.
++                svcadm enable "$SCRIPTNAME"
++                status=$?
++            else
++                ${PROG_BIN} ${PROG_ARGS}
++                status=$?
++            fi
++            if [ $status -eq 0 ]; then
++                status=1
++                for i in `seq 5`; do
++                    #Did the program start?
++                    generic_status
++                    status=$?
++                    [ $status -eq 0 ] && break
++                    sleep 1
++                done
++            fi
++            ;;
++        UNKNOWN)
++            ${PROG_BIN} ${PROG_ARGS}
++            status=$?
++            ;;
++    esac
++
++    if [ -n "${POSTSTARTHOOK}" ]; then
++	${POSTSTARTHOOK}
++    fi
++
++    [ $status = 0 ] && [ ${PLATFORM} != "DEBIAN" ] && touch ${LOCKFILE}
++    return $status
++}
++
++daemon_stop() {
++    case "${PLATFORM}" in 
++        REDHAT)
++            echo -n $"Stopping `basename ${PROG_BIN}`: "
++            killproc `basename ${PROG_BIN}`
++            status=$?
++            ;;
++        SUSE)
++            echo -n "Stopping $PROG_DESC "
++            killproc -TERM ${PROG_BIN}
++            status=$?
++            ;;
++        DEBIAN)
++            log_daemon_msg "Stopping $PROG_DESC: `basename $PROG_BIN`"
++            status=1
++            #only try to stop the daemon if it is running
++            if generic_status; then
++                kill -TERM "`generic_pid`"
++		# Forget our pidfile since it will now be invalid
++		# if is still present.  This means generic_status
++		# will fall back on ps to see if the daemon is still
++		# running.  This is important on LinuxThreads-based
++		# systems where other threads can still be in the process
++		# of shutting down even when the main thread has exited
++		PIDFILE=""
++                #Wait up to 5 seconds for the program to end
++                for i in `seq 5`; do
++                    #Did the program end?
++                    generic_status
++                    # Make sure the agent is not running and is not a zombie
++                    # process.
++                    [ $? -ne 0 -a $? -ne 4 ] && status=0 && break
++                    # use the following line instead after bug 3634 is fixed
++                    #[ $? -eq 3 -o $? -eq 2 ] && status=0 && break
++                    sleep 1
++                done
++            fi
++            log_end_msg $status
++            ;;
++        AIX | HP-UX | SOLARIS | FREEBSD | ESXI)
++            echo -n "Stopping $PROG_DESC"
++            status=1
++            #only try to stop the daemon if it is running
++            if generic_status; then
++                pid="`generic_pid`"
++                kill -TERM $pid
++
++                #Wait up to 5 seconds for the program to end
++                for i in `seq 5`; do
++                    #Did the program end?
++                    generic_status
++                    # Make sure the agent is not running and is not a zombie
++                    # process.
++                    [ $? -ne 0 -a $? -ne 4 ] && status=0 && break
++                    # use the following line instead after bug 3634 is fixed
++                    #[ $? -eq 3 -o $? -eq 2 ] && status=0 && break
++                    sleep 1
++                done
++            fi
++            ;;
++        UNKNOWN)
++            killall -TERM `basename ${PROG_BIN}`
++            status=$?
++            ;;
++    esac
++
++    [ $status = 0 ] && /bin/rm -f ${LOCKFILE}
++    return $status
++}
++
++daemon_reload()
++{
++    case "${PLATFORM}" in 
++        REDHAT | SUSE | FREEBSD | ESXI)
++            echo -n $"Reloading ${PROG_DESC} configuration"
++	    killall -HUP "`basename ${PROG_BIN}`"
++            status=$?
++            ;;
++        DEBIAN)
++            log_daemon_msg "Reloading $PROG_DESC configuration"
++	    killall -HUP "`basename ${PROG_BIN}`"
++	    status=$?
++            log_end_msg $status
++            ;;
++        AIX | HP-UX | SOLARIS | UNKNOWN)
++            echo -n "Stopping $PROG_DESC"
++	    generic_killall -HUP
++	    status=$?
++            ;;
++    esac
++
++    return $status
++}
++
++daemon_status() {
++    case "${PLATFORM}" in
++        REDHAT)
++            status ${PROG_BIN}
++            ;;
++        SUSE)
++            checkproc ${PROG_BIN}
++            rc_status -v
++            ;;
++        AIX | HP-UX | SOLARIS | DEBIAN | FREEBSD | ESXI)
++            generic_status
++            status=$?
++            case "$status" in
++                0)
++                    echo "running";
++                    ;;
++                1)
++                    echo "stopped";
++                    #Use the bellow line instead after bug 3634 is fixed
++                    #echo "died leaving pid file";
++                    ;;
++                2)
++                    echo "died leaving lock file";
++                    ;;
++                3)
++                    echo "stopped";
++                    ;;
++            esac
++            return $status
++        ;;
++        UNKNOWN)
++            echo "Not implemented."
++            ;;
++    esac
++}
++
++#Sends the signal specified by the first parameter to all instances
++#of $PROG_BIN
++generic_killall()
++{
++    #This gets the list of all current running instances of PROG_BIN,
++    #but it can't tell which directory the program was run from. If
++    #cmdline is available in the proc pseudo-filesystem, we'll verify
++    #the pids.
++    unverified_pids=`generic_pid`
++    pids=
++    for pid in $unverified_pids; do
++        #If the system keeps cmdline files, check them
++        if [ -f /proc/${pid}/cmdline ]; then
++            #We can't check the exe file because we may be looking
++            #at a version of the program that has been overwritten
++            grep -q ${AUTHD_BIN} /proc/${pid}/cmdline && pids="$pids $pid"
++        else
++            pids="$pids $pid"
++        fi
++    done
++
++    for pid in $pids; do
++        [ ! -z "`UNIX95=1 ps -p $pid -o pid=`" ] && kill "$1" $pid
++    done
++
++    #The manpage of killall says it returns 0 if at least one process is
++    #killed. I can't get it to return anything other than 0. Even if no
++    #processes die with SIGTERM. We'll just return 0 here too
++    return 0
++}
++
++####################################################################
++## Main init script code
++##
++
++if type run_rc_command >/dev/null 2>&1; then
++    # Looks like this is a FreeBSD based system. We should use their arg
++    # parsing instead of our own.
++    name="$SCRIPTNAME"
++    rcvar="`set_rcvar`"
++    command="$PROG_BIN"
++    command_args="$PROG_ARGS"
++    pidfile="$PIDFILE"
++    eval "${name}_enable=YES"
++
++    load_rc_config "$name"
++    [ "$1" = "start" -a -n "${STARTHOOK}" ] && ${STARTHOOK}
++    check_load_path
++    run_rc_command "$1" || exit $?
++    [ "$1" = "start" -a -n "${POSTSTARTHOOK}" ] && ${POSTSTARTHOOK}
++    exit 0
++fi
++
++case "$1" in 
++    start)
++        daemon_start
++        ret=$?
++        print_status $ret
++        ;;
++
++    stop)
++        daemon_stop
++        ret=$?
++        print_status $ret
++        ;;
++
++    # HP-UX calls this
++    stop_msg)
++        echo "Stopping $PROG_DESC"
++        exit 0
++        ;;
++
++    # HP-UX calls this
++    start_msg)
++        echo "Starting $PROG_DESC"
++        exit 0
++        ;;
++
++    restart)
++        daemon_stop
++        ret=$?
++        print_status $ret
++        daemon_start
++        ret=$?
++        print_status $ret
++        ;;
++        
++    status)
++        daemon_status
++        ;;
++
++    reload)
++	# Ignore SIGHUP since killall could send it to us as well
++	trap '' HUP
++	daemon_reload
++	ret=$?
++	print_status $ret
++        ;;
++    *)
++        echo "Usage: $0 {start|stop|restart|status|reload}"
++        exit 1
++        ;;
++esac
++
+diff -Nurb '--exclude=.bzr' likewise-open/git-build/config/init-likewise.sh likewise-open.new/git-build/config/init-likewise.sh
+--- likewise-open/git-build/config/init-likewise.sh	2011-09-09 11:04:54.000000000 -0700
++++ likewise-open.new/git-build/config/init-likewise.sh	1969-12-31 16:00:00.000000000 -0800
+@@ -1,251 +0,0 @@
+-#!/bin/sh
+-# Implicit arguments
+-#  PREFIX - prefix of Likewise installation
+-#  SERVICE_NAME - name of the service
+-
+-LWSM="${PREFIX}/bin/lwsm"
+-
+-PLATFORM=""
+-if [ -f /etc/init.d/functions ]; then
+-    . /etc/init.d/functions
+-    PLATFORM="REDHAT"
+-elif [ -f /etc/rc.status ]; then
+-    . /etc/rc.status
+-    PLATFORM="SUSE"
+-elif [ -f /etc/debian_version ]; then
+-    . /lib/lsb/init-functions
+-    PLATFORM="DEBIAN"
+-elif [ "`uname -s`" = 'AIX' ]; then
+-    PLATFORM="AIX"
+-elif [ "`uname -s`" = 'HP-UX' ]; then
+-    PLATFORM="HP-UX"
+-elif [ "`uname -s`" = 'SunOS' ]; then
+-    PLATFORM="SOLARIS"
+-elif [ "`uname -s`" = 'VMkernel' ]; then
+-    PLATFORM="ESXI"
+-elif [ "`uname`" = "FreeBSD" ]; then
+-    PLATFORM="FREEBSD"
+-else
+-    PLATFORM="UNKNOWN"
+-fi
+-
+-service_description()
+-{
+-    echo "Likewise Open services"
+-}
+-
+-service_start()
+-{
+-    status=""
+-
+-    case "${PLATFORM}" in
+-        REDHAT)
+-            printf "%s" "Starting `service_description`: " 
+-            ${LWSM} -q autostart
+-            status=$?
+-            if [ $status -eq 0 ]
+-            then
+-                echo_success
+-                echo
+-            else
+-                echo_failure
+-                echo
+-            fi
+-            ;;
+-        SUSE)
+-            printf "%s" "Starting `service_description`"
+-            ${LWSM} -q autostart
+-            status=$?
+-            if [ $status -eq 0 ]
+-            then
+-                rc_reset
+-                rc_status -v
+-            else
+-                rc_failed $status
+-                rc_status -v
+-            fi
+-            ;;
+-        DEBIAN)
+-            log_daemon_msg "Starting `service_description`"
+-            ${LWSM} -q autostart
+-            status=$?
+-            log_end_msg $status
+-            ;;
+-         HP-UX | SOLARIS | FREEBSD | ESXI | AIX)
+-            printf "%s" "Starting `service_description`"
+-            if [ -x /usr/sbin/svcadm ]; then
+-                # Don't do anything!
+-                status=0
+-            else
+-                ${LWSM} -q autostart
+-                status=$?
+-            fi
+-
+-            if [ $status -eq 0 ]
+-            then
+-                echo " ...ok"
+-            else
+-                echo " ...failed"
+-            fi
+-            ;;
+-        UNKNOWN)
+-            ${LWSM} -q autostart
+-            status=$?
+-            ;;
+-    esac
+-
+-    return $status
+-}
+-
+-service_restart()
+-{
+-    status=""
+-
+-    case "${PLATFORM}" in
+-        REDHAT)
+-            printf "%s" "Restarting `service_description` (not supported)"
+-            status=0
+-            echo_success
+-            ;;
+-        SUSE)
+-            printf "%s" "Restarting `service_description` (not supported)"
+-            status=0
+-            rc_reset
+-            rc_status -v
+-            ;;
+-        DEBIAN)
+-            log_daemon_msg "Restarting `service_description` (not supported)"
+-            status=0
+-            log_end_msg $status
+-            ;;
+-         HP-UX | SOLARIS | FREEBSD | ESXI | AIX)
+-            printf "%s" "Restarting `service_description` (not supported)"
+-            status=0
+-            echo " ...ok"
+-            ;;
+-        UNKNOWN)
+-            status=0
+-            ;;
+-    esac
+-
+-    return $status
+-}
+-
+-service_stop()
+-{
+-    status=""
+-
+-    case "${PLATFORM}" in 
+-        REDHAT)
+-            printf "%s" "Stopping `service_description` (not supported) "
+-            status=0
+-            echo_success
+-            ;;
+-        SUSE)
+-            printf "%s" "Stopping `service_description` (not supported)"
+-            status=0
+-            rc_reset
+-            rc_status -v
+-            ;;
+-        DEBIAN)
+-            log_daemon_msg "Stopping `service_description` (not supported)"
+-            status=0
+-            log_end_msg $status
+-            ;;
+-        AIX | HP-UX | SOLARIS | FREEBSD | ESXI)
+-            printf "%s" "Stopping `service_description` (not supported)"
+-            status=0
+-            echo " ...ok"
+-            ;;
+-        UNKNOWN)
+-            status=0
+-            ;;
+-    esac
+-
+-    return $status
+-}
+-
+-service_refresh()
+-{
+-    case "${PLATFORM}" in
+-        REDHAT)
+-            printf "%s" "Refreshing `service_description $1` configuration"
+-            status=0
+-            echo_success
+-            ;;
+-        SUSE)
+-            printf "%s" "Refreshing `service_description $1` configuration"
+-            status=0
+-            rc_reset
+-            rc_status -v
+-            ;;
+-        DEBIAN)
+-            log_daemon_msg "Refreshing `service_description $1` configuration"
+-            status=0
+-            log_end_msg $status
+-            ;;
+-        AIX | HP-UX | SOLARIS | FREEBSD | ESXI)
+-            printf "%s" "Refreshing `service_description $1` configuration"
+-            status=0
+-            echo " ...ok"
+-            ;;
+-        UNKNOWN)
+-            status=0
+-            ;;
+-    esac
+-
+-    return $status
+-}
+-
+-if [ -f /etc/rc.subr ]; then
+-    . /etc/rc.subr
+-fi
+-
+-case "$1" in
+-    start|faststart|forcestart|onestart)
+-        service_start "$SERVICE_NAME"
+-        exit $?
+-        ;;
+-    stop|faststop|forcestop|onestop)
+-        service_stop "$SERVICE_NAME"
+-        exit $?
+-        ;;
+-    status|faststatus|forcestatus|onestop)
+-        echo "not supported"
+-        exit 0
+-        ;;
+-    restart|fastrestart|forcerestart|onerestart)
+-        service_restart "$SERVICE_NAME"
+-        exit $?
+-        ;;
+-    refresh|reload)
+-        service_refresh "$SERVICE_NAME"
+-        exit $?
+-        ;;
+-    start_msg)
+-        echo "Starting `service_description`"
+-        exit 0
+-        ;;
+-    stop_msg)
+-        echo "Stopping `service_description` (not supported)"
+-        exit 0
+-        ;;
+-    rcvar|fastrcvar|forcercvar|onercvar)
+-        if type run_rc_command >/dev/null 2>&1; then
+-            # Looks like this is a FreeBSD based system.
+-            name=likewise
+-            rcvar="`set_rcvar`"
+-            start_cmd="service_start"
+-            stop_cmd="service_stop"
+-            eval "${name}_enable=YES"
+-
+-            load_rc_config "$name"
+-            run_rc_command "$1" || exit $?
+-            exit 0
+-        fi
+-        ;;
+-    *)
+-        echo "Unrecognized command: $1"
+-        exit 1
+-        ;;
+-esac
+diff -Nurb '--exclude=.bzr' likewise-open/git-build/config/init-likewise.sh.in likewise-open.new/git-build/config/init-likewise.sh.in
+--- likewise-open/git-build/config/init-likewise.sh.in	1969-12-31 16:00:00.000000000 -0800
++++ likewise-open.new/git-build/config/init-likewise.sh.in	2011-09-09 11:04:54.000000000 -0700
+@@ -0,0 +1,251 @@
++#!/bin/sh
++# Implicit arguments
++#  PREFIX - prefix of Likewise installation
++#  SERVICE_NAME - name of the service
++
++LWSM="${PREFIX}/bin/lwsm"
++
++PLATFORM=""
++if [ -f /etc/init.d/functions ]; then
++    . /etc/init.d/functions
++    PLATFORM="REDHAT"
++elif [ -f /etc/rc.status ]; then
++    . /etc/rc.status
++    PLATFORM="SUSE"
++elif [ -f /etc/debian_version ]; then
++    . /lib/lsb/init-functions
++    PLATFORM="DEBIAN"
++elif [ "`uname -s`" = 'AIX' ]; then
++    PLATFORM="AIX"
++elif [ "`uname -s`" = 'HP-UX' ]; then
++    PLATFORM="HP-UX"
++elif [ "`uname -s`" = 'SunOS' ]; then
++    PLATFORM="SOLARIS"
++elif [ "`uname -s`" = 'VMkernel' ]; then
++    PLATFORM="ESXI"
++elif [ "`uname`" = "FreeBSD" ]; then
++    PLATFORM="FREEBSD"
++else
++    PLATFORM="UNKNOWN"
++fi
++
++service_description()
++{
++    echo "Likewise Open services"
++}
++
++service_start()
++{
++    status=""
++
++    case "${PLATFORM}" in
++        REDHAT)
++            printf "%s" "Starting `service_description`: " 
++            ${LWSM} -q autostart
++            status=$?
++            if [ $status -eq 0 ]
++            then
++                echo_success
++                echo
++            else
++                echo_failure
++                echo
++            fi
++            ;;
++        SUSE)
++            printf "%s" "Starting `service_description`"
++            ${LWSM} -q autostart
++            status=$?
++            if [ $status -eq 0 ]
++            then
++                rc_reset
++                rc_status -v
++            else
++                rc_failed $status
++                rc_status -v
++            fi
++            ;;
++        DEBIAN)
++            log_daemon_msg "Starting `service_description`"
++            ${LWSM} -q autostart
++            status=$?
++            log_end_msg $status
++            ;;
++         HP-UX | SOLARIS | FREEBSD | ESXI | AIX)
++            printf "%s" "Starting `service_description`"
++            if [ -x /usr/sbin/svcadm ]; then
++                # Don't do anything!
++                status=0
++            else
++                ${LWSM} -q autostart
++                status=$?
++            fi
++
++            if [ $status -eq 0 ]
++            then
++                echo " ...ok"
++            else
++                echo " ...failed"
++            fi
++            ;;
++        UNKNOWN)
++            ${LWSM} -q autostart
++            status=$?
++            ;;
++    esac
++
++    return $status
++}
++
++service_restart()
++{
++    status=""
++
++    case "${PLATFORM}" in
++        REDHAT)
++            printf "%s" "Restarting `service_description` (not supported)"
++            status=0
++            echo_success
++            ;;
++        SUSE)
++            printf "%s" "Restarting `service_description` (not supported)"
++            status=0
++            rc_reset
++            rc_status -v
++            ;;
++        DEBIAN)
++            log_daemon_msg "Restarting `service_description` (not supported)"
++            status=0
++            log_end_msg $status
++            ;;
++         HP-UX | SOLARIS | FREEBSD | ESXI | AIX)
++            printf "%s" "Restarting `service_description` (not supported)"
++            status=0
++            echo " ...ok"
++            ;;
++        UNKNOWN)
++            status=0
++            ;;
++    esac
++
++    return $status
++}
++
++service_stop()
++{
++    status=""
++
++    case "${PLATFORM}" in 
++        REDHAT)
++            printf "%s" "Stopping `service_description` (not supported) "
++            status=0
++            echo_success
++            ;;
++        SUSE)
++            printf "%s" "Stopping `service_description` (not supported)"
++            status=0
++            rc_reset
++            rc_status -v
++            ;;
++        DEBIAN)
++            log_daemon_msg "Stopping `service_description` (not supported)"
++            status=0
++            log_end_msg $status
++            ;;
++        AIX | HP-UX | SOLARIS | FREEBSD | ESXI)
++            printf "%s" "Stopping `service_description` (not supported)"
++            status=0
++            echo " ...ok"
++            ;;
++        UNKNOWN)
++            status=0
++            ;;
++    esac
++
++    return $status
++}
++
++service_refresh()
++{
++    case "${PLATFORM}" in
++        REDHAT)
++            printf "%s" "Refreshing `service_description $1` configuration"
++            status=0
++            echo_success
++            ;;
++        SUSE)
++            printf "%s" "Refreshing `service_description $1` configuration"
++            status=0
++            rc_reset
++            rc_status -v
++            ;;
++        DEBIAN)
++            log_daemon_msg "Refreshing `service_description $1` configuration"
++            status=0
++            log_end_msg $status
++            ;;
++        AIX | HP-UX | SOLARIS | FREEBSD | ESXI)
++            printf "%s" "Refreshing `service_description $1` configuration"
++            status=0
++            echo " ...ok"
++            ;;
++        UNKNOWN)
++            status=0
++            ;;
++    esac
++
++    return $status
++}
++
++if [ -f /etc/rc.subr ]; then
++    . /etc/rc.subr
++fi
++
++case "$1" in
++    start|faststart|forcestart|onestart)
++        service_start "$SERVICE_NAME"
++        exit $?
++        ;;
++    stop|faststop|forcestop|onestop)
++        service_stop "$SERVICE_NAME"
++        exit $?
++        ;;
++    status|faststatus|forcestatus|onestop)
++        echo "not supported"
++        exit 0
++        ;;
++    restart|fastrestart|forcerestart|onerestart)
++        service_restart "$SERVICE_NAME"
++        exit $?
++        ;;
++    refresh|reload)
++        service_refresh "$SERVICE_NAME"
++        exit $?
++        ;;
++    start_msg)
++        echo "Starting `service_description`"
++        exit 0
++        ;;
++    stop_msg)
++        echo "Stopping `service_description` (not supported)"
++        exit 0
++        ;;
++    rcvar|fastrcvar|forcercvar|onercvar)
++        if type run_rc_command >/dev/null 2>&1; then
++            # Looks like this is a FreeBSD based system.
++            name=likewise
++            rcvar="`set_rcvar`"
++            start_cmd="service_start"
++            stop_cmd="service_stop"
++            eval "${name}_enable=YES"
++
++            load_rc_config "$name"
++            run_rc_command "$1" || exit $?
++            exit 0
++        fi
++        ;;
++    *)
++        echo "Unrecognized command: $1"
++        exit 1
++        ;;
++esac
+diff -Nurb '--exclude=.bzr' likewise-open/git-build/config/likewise likewise-open.new/git-build/config/likewise
+--- likewise-open/git-build/config/likewise	2011-09-09 11:04:54.000000000 -0700
++++ likewise-open.new/git-build/config/likewise	1969-12-31 16:00:00.000000000 -0800
+@@ -1,36 +0,0 @@
+-#! /bin/sh
+-# ex: set tabstop=4 expandtab shiftwidth=4:
+-#
+-# Copyright (c) Likewise Software.  All rights reserved.
+-#
+-#LWI_STARTUP_TYPE_REDHAT###
+-#LWI_STARTUP_TYPE_REDHAT# chkconfig: 35 21 9
+-#LWI_STARTUP_TYPE_REDHAT# description: Start Likewise Open services
+-#LWI_STARTUP_TYPE_REDHAT###
+-#LWI_STARTUP_TYPE_REDHAT#
+-#LWI_STARTUP_TYPE_SUSE### BEGIN INIT INFO
+-#LWI_STARTUP_TYPE_SUSE# Provides: likewise
+-#LWI_STARTUP_TYPE_SUSE# Required-Start: $network $remote_fs lwsmd
+-#LWI_STARTUP_TYPE_SUSE# Required-Stop:
+-#LWI_STARTUP_TYPE_SUSE# Default-Start: 3 5
+-#LWI_STARTUP_TYPE_SUSE# Default-Stop:
+-#LWI_STARTUP_TYPE_SUSE# Description: Start Likewise Open services
+-#LWI_STARTUP_TYPE_SUSE### END INIT INFO
+-#LWI_STARTUP_TYPE_DEBIAN### BEGIN INIT INFO
+-#LWI_STARTUP_TYPE_DEBIAN# Provides: likewise
+-#LWI_STARTUP_TYPE_DEBIAN# Required-Start: $network $remote_fs $syslog lwsmd
+-#LWI_STARTUP_TYPE_DEBIAN# Required-Stop:
+-#LWI_STARTUP_TYPE_DEBIAN# X-Start-Before: cron
+-#LWI_STARTUP_TYPE_DEBIAN# X-Start-After:
+-#LWI_STARTUP_TYPE_DEBIAN# Default-Start: 2 3 4 5
+-#LWI_STARTUP_TYPE_DEBIAN# Default-Stop:
+-#LWI_STARTUP_TYPE_DEBIAN# Description: Start Likewise Open services
+-#LWI_STARTUP_TYPE_DEBIAN### END INIT INFO
+-#LWI_STARTUP_TYPE_FREEBSD# PROVIDE: likewise
+-#LWI_STARTUP_TYPE_FREEBSD# REQUIRE: NETWORKING lwsmd
+-#LWI_STARTUP_TYPE_FREEBSD# BEFORE: LOGIN
+-
+-PREFIX="PREFIX_DIR"
+-SERVICE_NAME="likewise"
+-
+-. EXECDIR/init-likewise.sh
+diff -Nurb '--exclude=.bzr' likewise-open/git-build/config/likewise.in likewise-open.new/git-build/config/likewise.in
+--- likewise-open/git-build/config/likewise.in	1969-12-31 16:00:00.000000000 -0800
++++ likewise-open.new/git-build/config/likewise.in	2011-09-09 14:25:19.000000000 -0700
+@@ -0,0 +1,36 @@
++#! /bin/sh
++# ex: set tabstop=4 expandtab shiftwidth=4:
++#
++# Copyright (c) Likewise Software.  All rights reserved.
++#
++#LWI_STARTUP_TYPE_REDHAT###
++#LWI_STARTUP_TYPE_REDHAT# chkconfig: 35 21 9
++#LWI_STARTUP_TYPE_REDHAT# description: Start Likewise Open services
++#LWI_STARTUP_TYPE_REDHAT###
++#LWI_STARTUP_TYPE_REDHAT#
++#LWI_STARTUP_TYPE_SUSE### BEGIN INIT INFO
++#LWI_STARTUP_TYPE_SUSE# Provides: likewise
++#LWI_STARTUP_TYPE_SUSE# Required-Start: $network $remote_fs lwsmd
++#LWI_STARTUP_TYPE_SUSE# Required-Stop:
++#LWI_STARTUP_TYPE_SUSE# Default-Start: 3 5
++#LWI_STARTUP_TYPE_SUSE# Default-Stop:
++#LWI_STARTUP_TYPE_SUSE# Description: Start Likewise Open services
++#LWI_STARTUP_TYPE_SUSE### END INIT INFO
++#LWI_STARTUP_TYPE_DEBIAN### BEGIN INIT INFO
++#LWI_STARTUP_TYPE_DEBIAN# Provides: likewise
++#LWI_STARTUP_TYPE_DEBIAN# Required-Start: $network $remote_fs $syslog lwsmd
++#LWI_STARTUP_TYPE_DEBIAN# Required-Stop:
++#LWI_STARTUP_TYPE_DEBIAN# X-Start-Before: cron
++#LWI_STARTUP_TYPE_DEBIAN# X-Start-After:
++#LWI_STARTUP_TYPE_DEBIAN# Default-Start: 2 3 4 5
++#LWI_STARTUP_TYPE_DEBIAN# Default-Stop:
++#LWI_STARTUP_TYPE_DEBIAN# Description: Start Likewise Open services
++#LWI_STARTUP_TYPE_DEBIAN### END INIT INFO
++#LWI_STARTUP_TYPE_FREEBSD# PROVIDE: likewise
++#LWI_STARTUP_TYPE_FREEBSD# REQUIRE: NETWORKING lwsmd
++#LWI_STARTUP_TYPE_FREEBSD# BEFORE: LOGIN
++
++PREFIX="@MK_PREFIX@"
++SERVICE_NAME="likewise"
++
++. @MK_LIBEXECDIR@/init-likewise.sh
+diff -Nurb '--exclude=.bzr' likewise-open/git-build/config/lwsmd likewise-open.new/git-build/config/lwsmd
+--- likewise-open/git-build/config/lwsmd	2011-09-09 11:04:54.000000000 -0700
++++ likewise-open.new/git-build/config/lwsmd	1969-12-31 16:00:00.000000000 -0800
+@@ -1,67 +0,0 @@
+-#! /bin/sh
+-# ex: set tabstop=4 expandtab shiftwidth=4:
+-#
+-# Copyright (c) Likewise Software.  All rights reserved.
+-#
+-#LWI_STARTUP_TYPE_REDHAT###
+-#LWI_STARTUP_TYPE_REDHAT# chkconfig: 35 17 9
+-#LWI_STARTUP_TYPE_REDHAT# description: Start and Stop Likewise Service Manager
+-#LWI_STARTUP_TYPE_REDHAT###
+-#LWI_STARTUP_TYPE_REDHAT#
+-#LWI_STARTUP_TYPE_SUSE### BEGIN INIT INFO
+-#LWI_STARTUP_TYPE_SUSE# Provides: lwsmd
+-#LWI_STARTUP_TYPE_SUSE# Required-Start: $network $syslog
+-#LWI_STARTUP_TYPE_SUSE# Required-Stop:
+-#LWI_STARTUP_TYPE_SUSE# Default-Start: 3 5
+-#LWI_STARTUP_TYPE_SUSE# Default-Stop: 0 1 2 6
+-#LWI_STARTUP_TYPE_SUSE# Description: Start and Stop Likewise Service Manager
+-#LWI_STARTUP_TYPE_SUSE### END INIT INFO
+-#LWI_STARTUP_TYPE_DEBIAN### BEGIN INIT INFO
+-#LWI_STARTUP_TYPE_DEBIAN# Provides: lwsmd
+-#LWI_STARTUP_TYPE_DEBIAN# Required-Start:
+-#LWI_STARTUP_TYPE_DEBIAN# Required-Stop:
+-#LWI_STARTUP_TYPE_DEBIAN# Default-Start: 2 3 4 5
+-#LWI_STARTUP_TYPE_DEBIAN# Default-Stop: 0 1 6
+-#LWI_STARTUP_TYPE_DEBIAN# Description: Start and Stop Likewise Service Manager
+-#LWI_STARTUP_TYPE_DEBIAN### END INIT INFO
+-#LWI_STARTUP_TYPE_FREEBSD# PROVIDE: lwsmd
+-#LWI_STARTUP_TYPE_FREEBSD# REQUIRE: NETWORKING
+-#LWI_STARTUP_TYPE_FREEBSD# BEFORE: LOGIN
+-
+-PROG_DESC="Likewise Service Manager"
+-PROG_BIN=PREFIX_DIR/sbin/lwsmd
+-PROG_ARGS="--start-as-daemon --syslog"
+-PIDFILE=
+-SCRIPTNAME="lwsmd"
+-STARTHOOK="fix_locale"
+-
+-lookup_user_locale()
+-{
+-    . /etc/sysconfig/language
+-    printf 'LANG=%q; export LANG\n' "$RC_LANG"
+-    printf 'LC_ALL=%q; export LC_ALL\n' "$RC_LC_ALL"
+-    printf 'LC_CTYPE=%q; export LC_CTYPE\n' "$RC_LC_CTYPE"
+-}
+-
+-fix_locale()
+-{
+-    if [ "$LC_ALL" = "POSIX" ]
+-    then
+-        unset LC_ALL
+-        export LC_ALL
+-    fi
+-    if type locale >/dev/null &&
+-        locale | grep LC_CTYPE | grep POSIX >/dev/null; then
+-        if [ -f /etc/sysconfig/language ]; then
+-            eval "`lookup_user_locale`"
+-        elif [ -f /etc/default/locale ]; then
+-            . /etc/default/locale
+-            export LANG
+-        fi
+-    elif [ -z "$LANG" ]; then
+-        LANG="en_US.UTF-8"
+-        export LANG
+-    fi
+-}
+-
+-. EXECDIR/init-base.sh
+diff -Nurb '--exclude=.bzr' likewise-open/git-build/config/lwsmd.in likewise-open.new/git-build/config/lwsmd.in
+--- likewise-open/git-build/config/lwsmd.in	1969-12-31 16:00:00.000000000 -0800
++++ likewise-open.new/git-build/config/lwsmd.in	2011-09-09 14:25:44.000000000 -0700
+@@ -0,0 +1,67 @@
++#! /bin/sh
++# ex: set tabstop=4 expandtab shiftwidth=4:
++#
++# Copyright (c) Likewise Software.  All rights reserved.
++#
++#LWI_STARTUP_TYPE_REDHAT###
++#LWI_STARTUP_TYPE_REDHAT# chkconfig: 35 17 9
++#LWI_STARTUP_TYPE_REDHAT# description: Start and Stop Likewise Service Manager
++#LWI_STARTUP_TYPE_REDHAT###
++#LWI_STARTUP_TYPE_REDHAT#
++#LWI_STARTUP_TYPE_SUSE### BEGIN INIT INFO
++#LWI_STARTUP_TYPE_SUSE# Provides: lwsmd
++#LWI_STARTUP_TYPE_SUSE# Required-Start: $network $syslog
++#LWI_STARTUP_TYPE_SUSE# Required-Stop:
++#LWI_STARTUP_TYPE_SUSE# Default-Start: 3 5
++#LWI_STARTUP_TYPE_SUSE# Default-Stop: 0 1 2 6
++#LWI_STARTUP_TYPE_SUSE# Description: Start and Stop Likewise Service Manager
++#LWI_STARTUP_TYPE_SUSE### END INIT INFO
++#LWI_STARTUP_TYPE_DEBIAN### BEGIN INIT INFO
++#LWI_STARTUP_TYPE_DEBIAN# Provides: lwsmd
++#LWI_STARTUP_TYPE_DEBIAN# Required-Start:
++#LWI_STARTUP_TYPE_DEBIAN# Required-Stop:
++#LWI_STARTUP_TYPE_DEBIAN# Default-Start: 2 3 4 5
++#LWI_STARTUP_TYPE_DEBIAN# Default-Stop: 0 1 6
++#LWI_STARTUP_TYPE_DEBIAN# Description: Start and Stop Likewise Service Manager
++#LWI_STARTUP_TYPE_DEBIAN### END INIT INFO
++#LWI_STARTUP_TYPE_FREEBSD# PROVIDE: lwsmd
++#LWI_STARTUP_TYPE_FREEBSD# REQUIRE: NETWORKING
++#LWI_STARTUP_TYPE_FREEBSD# BEFORE: LOGIN
++
++PROG_DESC="Likewise Service Manager"
++PROG_BIN=@MK_PREFIX@/sbin/lwsmd
++PROG_ARGS="--start-as-daemon --syslog"
++PIDFILE=
++SCRIPTNAME="lwsmd"
++STARTHOOK="fix_locale"
++
++lookup_user_locale()
++{
++    . /etc/sysconfig/language
++    printf 'LANG=%q; export LANG\n' "$RC_LANG"
++    printf 'LC_ALL=%q; export LC_ALL\n' "$RC_LC_ALL"
++    printf 'LC_CTYPE=%q; export LC_CTYPE\n' "$RC_LC_CTYPE"
++}
++
++fix_locale()
++{
++    if [ "$LC_ALL" = "POSIX" ]
++    then
++        unset LC_ALL
++        export LC_ALL
++    fi
++    if type locale >/dev/null &&
++        locale | grep LC_CTYPE | grep POSIX >/dev/null; then
++        if [ -f /etc/sysconfig/language ]; then
++            eval "`lookup_user_locale`"
++        elif [ -f /etc/default/locale ]; then
++            . /etc/default/locale
++            export LANG
++        fi
++    elif [ -z "$LANG" ]; then
++        LANG="en_US.UTF-8"
++        export LANG
++    fi
++}
++
++. @MK_LIBEXECDIR@/init-base.sh
+diff -Nurb '--exclude=.bzr' likewise-open/git-build/config/MakeKitBuild likewise-open.new/git-build/config/MakeKitBuild
+--- likewise-open/git-build/config/MakeKitBuild	2011-09-09 11:04:54.000000000 -0700
++++ likewise-open.new/git-build/config/MakeKitBuild	2011-09-12 11:03:00.000000000 -0700
+@@ -1,14 +1,27 @@
+ configure()
+ {
++    mk_declare -o \
++        MK_PREFIX \
++        MK_LIBEXECDIR \
++        MK_SBINDIR \
++        LW_INITDIR \
++        VERSION="$LW_VERSION" \
++        BUILD="${LW_BUILD_ID:-0}" \
++        REVISION="${LW_BUILD_REVISION:-0}"
++
+     mk_output_file VERSION
++    mk_output_file init-base.sh
++    mk_output_file init-likewise.sh
++    mk_output_file likewise
++    mk_output_file lwsmd
+ }
+ 
+ make()
+ {
+-    for i in init-base.sh init-likewise.sh
+-    do
+-        lw_init_script_helper "$i"
+-    done
++    mk_stage \
++        DESTDIR="${MK_LIBEXECDIR}" \
++        MODE=0755 \
++        init-base.sh init-likewise.sh
+ 
+     mk_stage \
+         SOURCE="krb5.conf.default" \
+@@ -26,58 +39,8 @@
+         DESTDIR="${MK_DATADIR}" \
+         SOURCE="likewise.pam-auth-update"
+ 
+-    for i in lwsmd likewise
+-    do
+-        lw_init_script "$i"
+-    done
+-}
+-
+-lw_init_script()
+-{
+-    mk_target \
+-        TARGET="${LW_INITDIR}/$1" \
+-        DEPS="$1" \
+-        _lw_install_init_script '$@' "&$1"
+-
+-    mk_add_all_target "$result"
+-}
+-
+-_lw_install_init_script()
+-{
+-    mk_msg_domain init
+-
+-    mk_msg "${1#$MK_STAGE_DIR}"
+-
+-    mk_mkdir "${1%/*}"
+-
+-    mk_run_or_fail sed \
+-        -e "s:PREFIX_DIR:${MK_PREFIX}:g" \
+-        -e "s:EXECDIR:${MK_LIBEXECDIR}:g" \
+-        < "$2" > "$1"
+-    mk_run_or_fail chmod +x "$1"
+-}
+-
+-lw_init_script_helper()
+-{
+-    mk_target \
+-        TARGET="${MK_LIBEXECDIR}/$1" \
+-        DEPS="$1" \
+-        _lw_install_init_script_helper '$@' "&$1"
+-
+-    mk_add_all_target "$result"
+-}
+-
+-_lw_install_init_script_helper()
+-{
+-    mk_msg_domain init
+-
+-    mk_msg "${1#$MK_STAGE_DIR}"
+-
+-    mk_mkdir "${1%/*}"
+-
+-    mk_run_or_fail sed \
+-        -e "s:PREFIX_DIR:${MK_PREFIX}:g" \
+-        -e "s:EXECDIR:${MK_LIBEXECDIR}:g" \
+-        < "$2" > "$1"
+-    mk_run_or_fail chmod +x "$1"
++    mk_stage \
++        DESTDIR="${LW_INITDIR}" \
++        MODE=0755 \
++        lwsmd likewise
+ }

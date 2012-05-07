@@ -1,4 +1,4 @@
-SUBDIRS="include libedit utils ipc common client logging_r parse server shellutil shell"
+SUBDIRS="include utils ipc common client logging_r parse server shellutil shell"
 
 configure()
 {
@@ -55,11 +55,11 @@ configure()
 
     mk_check_headers \
 	FAIL=yes \
-	sqlite3.h uuid/uuid.h
+	sqlite3.h uuid/uuid.h histedit.h
     
     mk_check_libraries \
 	FAIL=yes \
-	sqlite3 uuid
+	sqlite3 uuid edit
 
     mk_check_libraries pthread
 
